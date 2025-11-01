@@ -19,75 +19,76 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Search,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 
-interface DashboardLayoutProps {
+interface LawyerDashboardLayoutProps {
   children: React.ReactNode
 }
 
 const navigation = [
   {
     name: "Chat",
-    href: "/user_dashboard",
+    href: "/lawyer_dashboard",
     icon: MessageCircle,
     description: "Free AI legal chat",
   },
   {
     name: "Advanced Chat",
-    href: "/user_dashboard/advanced-chat",
+    href: "/lawyer_dashboard/advanced-chat",
     icon: FileText,
     description: "Document analysis & tools",
     premium: true,
   },
   {
+    name: "Find Cases",
+    href: "/lawyer_dashboard/find-cases",
+    icon: Search,
+    description: "Browse and accept cases",
+  },
+  {
     name: "My Cases",
-    href: "/user_dashboard/my-cases",
+    href: "/lawyer_dashboard/my-cases",
     icon: FileText,
     description: "File and manage cases",
   },
   {
-    name: "Lawyer Profiles",
-    href: "/user_dashboard/lawyers",
-    icon: Users,
-    description: "Find legal professionals",
-  },
-  {
     name: "Case Chats",
-    href: "/user_dashboard/accepted-cases-chat",
+    href: "/lawyer_dashboard/accepted-cases-chat",
     icon: MessageCircle,
     description: "Chat with accepted lawyers",
   },
   {
     name: "Content",
-    href: "/user_dashboard/content",
+    href: "/lawyer_dashboard/content",
     icon: BookOpen,
     description: "Videos & books library",
   },
   {
     name: "Laws & Regulations",
-    href: "/user_dashboard/laws",
+    href: "/lawyer_dashboard/laws",
     icon: Scale,
     description: "Legal documents & files",
   },
   {
     name: "Profile",
-    href: "/user_dashboard/profile",
+    href: "/lawyer_dashboard/profile",
     icon: User,
     description: "Account settings",
   },
 ]
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function LawyerDashboardLayout({ children }: LawyerDashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
   useEffect(() => {
-    const savedCollapsed = localStorage.getItem("sidebar-collapsed")
+    const savedCollapsed = localStorage.getItem("lawyer-sidebar-collapsed")
     if (savedCollapsed) {
       setCollapsed(savedCollapsed === "true")
     }
@@ -96,7 +97,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const toggleCollapsed = () => {
     const newCollapsed = !collapsed
     setCollapsed(newCollapsed)
-    localStorage.setItem("sidebar-collapsed", String(newCollapsed))
+    localStorage.setItem("lawyer-sidebar-collapsed", String(newCollapsed))
   }
 
   const handleLogout = () => {
@@ -105,7 +106,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   const handleUpgrade = () => {
-    router.push("/user_dashboard/profile?tab=subscription")
+    router.push("/lawyer_dashboard/profile?tab=subscription")
   }
 
   return (
@@ -253,3 +254,4 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     </div>
   )
 }
+

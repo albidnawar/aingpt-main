@@ -20,8 +20,12 @@ export default function HomePage() {
     }
   }
 
-  const handleLogin = () => {
-    router.push("/dashboard")
+  const handleLogin = (userType: "user" | "lawyer") => {
+    if (userType === "lawyer") {
+      router.push("/lawyer_dashboard")
+    } else {
+      router.push("/user_dashboard")
+    }
   }
 
   const toggleVoiceInput = () => {
