@@ -19,10 +19,13 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Bell,
+  Coins,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -83,6 +86,7 @@ const navigation = [
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -91,6 +95,36 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (savedCollapsed) {
       setCollapsed(savedCollapsed === "true")
     }
+  }, [])
+
+  // Fetch token balance
+  useEffect(() => {
+    const fetchTokenBalance = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session?.user) {
+          return
+        }
+
+        const { data: userData, error } = await supabase
+          .from("users")
+          .select("token_balance")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (!error && userData) {
+          setTokenBalance(userData.token_balance || 0)
+        }
+      } catch (err) {
+        console.error("Error fetching token balance:", err)
+      }
+    }
+
+    fetchTokenBalance()
   }, [])
 
   const toggleCollapsed = () => {
@@ -234,14 +268,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 ml-auto">
               <ThemeToggle />
-              <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
+              <Button variant="outline" size="sm" className="gap-2">
+                <Coins className="h-4 w-4" />
+                <span className="font-medium">{tokenBalance !== null ? tokenBalance : "..."}</span>
               </Button>
-              <Button className="bg-accent hover:bg-accent/90" onClick={handleUpgrade}>
-                Subscribe
+              <Button variant="ghost" size="sm" className="relative">
+                <Bell className="h-4 w-4" />
+                <span className="sr-only">Notifications</span>
               </Button>
             </div>
           </div>

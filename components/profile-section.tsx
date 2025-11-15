@@ -23,6 +23,48 @@ interface UserProfile {
   bio?: string
 }
 
+interface LawyerCaseDetail {
+  policeStation: string
+  district: string
+  caseNumber: string
+  lawNameAndSection: string
+  filingDate: string
+  yearlyNumber: string
+  crimeTitle: string
+}
+
+interface LawyerEducationDetail {
+  degree: string
+  institution: string
+  year: string
+}
+
+interface LawyerProfessionalDetails {
+  educationDetails: LawyerEducationDetail[]
+  currentCases: LawyerCaseDetail[]
+  significantCases: LawyerCaseDetail[]
+}
+
+const emptyCase: LawyerCaseDetail = {
+  policeStation: "",
+  district: "",
+  caseNumber: "",
+  lawNameAndSection: "",
+  filingDate: "",
+  yearlyNumber: "",
+  crimeTitle: "",
+}
+
+const emptyEducation: LawyerEducationDetail = {
+  degree: "",
+  institution: "",
+  year: "",
+}
+
+interface ProfileSectionProps {
+  variant?: "user" | "lawyer"
+}
+
 const mockUser: UserProfile = {
   name: "Ahmed Rahman",
   email: "ahmed.rahman@email.com",
@@ -73,7 +115,7 @@ const subscriptionPlans = [
   },
 ]
 
-export function ProfileSection() {
+export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
   const [user, setUser] = useState<UserProfile>(mockUser)
   const [isEditing, setIsEditing] = useState(false)
   const [notifications, setNotifications] = useState({
@@ -81,6 +123,52 @@ export function ProfileSection() {
     sms: false,
     push: true,
     marketing: false,
+  })
+  const [lawyerDetails, setLawyerDetails] = useState<LawyerProfessionalDetails>({
+    educationDetails: [
+      { degree: "LL.B (Hons)", institution: "University of Dhaka", year: "2015" },
+      { degree: "LL.M", institution: "London School of Economics", year: "2017" },
+    ],
+    currentCases: [
+      {
+        policeStation: "Gulshan Police Station",
+        district: "Dhaka",
+        caseNumber: "2024/PS/001",
+        lawNameAndSection: "Property Law - Section 5",
+        filingDate: "2024-01-15",
+        yearlyNumber: "2024-001",
+        crimeTitle: "Property boundary dispute",
+      },
+    ],
+    significantCases: [
+      {
+        policeStation: "Dhanmondi Police Station",
+        district: "Dhaka",
+        caseNumber: "2023/PS/015",
+        lawNameAndSection: "Civil Law - Section 10",
+        filingDate: "2023-03-20",
+        yearlyNumber: "2023-115",
+        crimeTitle: "Rahman vs Rahman - Property dispute settlement",
+      },
+      {
+        policeStation: "Motijheel Police Station",
+        district: "Dhaka",
+        caseNumber: "2022/PS/042",
+        lawNameAndSection: "Corporate Law - Section 18B",
+        filingDate: "2022-07-11",
+        yearlyNumber: "2022-390",
+        crimeTitle: "ABC Corp vs X Industries - Corporate litigation",
+      },
+      {
+        policeStation: "Kotwali Police Station",
+        district: "Dhaka",
+        caseNumber: "2021/PS/098",
+        lawNameAndSection: "Criminal Law - Section 302",
+        filingDate: "2021-11-05",
+        yearlyNumber: "2021-512",
+        crimeTitle: "State vs Karim - Criminal defense",
+      },
+    ],
   })
 
   const [activeTab, setActiveTab] = useState("profile")
@@ -102,6 +190,165 @@ export function ProfileSection() {
     // Handle subscription upgrade
     console.log(`Upgrading to ${plan}`)
   }
+
+  const handleCaseChange = (
+    listKey: "currentCases" | "significantCases",
+    index: number,
+    field: keyof LawyerCaseDetail,
+    value: string,
+  ) => {
+    const updatedList = [...lawyerDetails[listKey]]
+    updatedList[index] = { ...updatedList[index], [field]: value }
+    setLawyerDetails({ ...lawyerDetails, [listKey]: updatedList })
+  }
+
+  const addNewCase = (listKey: "currentCases" | "significantCases") => {
+    setLawyerDetails({
+      ...lawyerDetails,
+      [listKey]: [...lawyerDetails[listKey], { ...emptyCase }],
+    })
+  }
+
+  const removeCase = (listKey: "currentCases" | "significantCases", index: number) => {
+    const updatedList = [...lawyerDetails[listKey]]
+    updatedList.splice(index, 1)
+    setLawyerDetails({ ...lawyerDetails, [listKey]: updatedList })
+  }
+
+  const handleEducationChange = (
+    index: number,
+    field: keyof LawyerEducationDetail,
+    value: string,
+  ) => {
+    const updated = [...lawyerDetails.educationDetails]
+    updated[index] = { ...updated[index], [field]: value }
+    setLawyerDetails({ ...lawyerDetails, educationDetails: updated })
+  }
+
+  const addNewEducation = () => {
+    setLawyerDetails({
+      ...lawyerDetails,
+      educationDetails: [...lawyerDetails.educationDetails, { ...emptyEducation }],
+    })
+  }
+
+  const removeEducation = (index: number) => {
+    const updated = [...lawyerDetails.educationDetails]
+    updated.splice(index, 1)
+    setLawyerDetails({ ...lawyerDetails, educationDetails: updated })
+  }
+
+  const renderCaseInputs = (
+    cases: LawyerCaseDetail[],
+    listKey: "currentCases" | "significantCases",
+    heading: string,
+    description: string,
+    addLabel: string,
+  ) => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-md font-semibold">{heading}</h4>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {isEditing && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => addNewCase(listKey)}
+            className="bg-transparent"
+          >
+            {addLabel}
+          </Button>
+        )}
+      </div>
+      <div className="space-y-4">
+        {cases.map((caseItem, index) => (
+          <div
+            key={`${listKey}-${index}`}
+            className="rounded-lg border border-border p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h5 className="text-sm font-semibold text-muted-foreground">Case {index + 1}</h5>
+              {isEditing && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeCase(listKey, index)}
+                  className="text-destructive hover:text-destructive"
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Police Station</Label>
+              <Input
+                value={caseItem.policeStation}
+                onChange={(e) => handleCaseChange(listKey, index, "policeStation", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>District</Label>
+              <Input
+                value={caseItem.district}
+                onChange={(e) => handleCaseChange(listKey, index, "district", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Case Number</Label>
+              <Input
+                value={caseItem.caseNumber}
+                onChange={(e) => handleCaseChange(listKey, index, "caseNumber", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Law Name & Section</Label>
+              <Input
+                value={caseItem.lawNameAndSection}
+                onChange={(e) =>
+                  handleCaseChange(listKey, index, "lawNameAndSection", e.target.value)
+                }
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Filing Date</Label>
+              <Input
+                type="date"
+                value={caseItem.filingDate}
+                onChange={(e) => handleCaseChange(listKey, index, "filingDate", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Yearly Number</Label>
+              <Input
+                value={caseItem.yearlyNumber}
+                onChange={(e) => handleCaseChange(listKey, index, "yearlyNumber", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label>Crime Title</Label>
+              <Input
+                value={caseItem.crimeTitle}
+                onChange={(e) => handleCaseChange(listKey, index, "crimeTitle", e.target.value)}
+                disabled={!isEditing}
+              />
+            </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -132,8 +379,12 @@ export function ProfileSection() {
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>Update your personal details and profile information</CardDescription>
+              <CardTitle>Profile & Professional Information</CardTitle>
+              <CardDescription>
+                {variant === "lawyer"
+                  ? "Update your personal details, professional background, and notable cases"
+                  : "Update your personal details and profile information"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar Section */}
@@ -155,74 +406,175 @@ export function ProfileSection() {
                 </div>
               </div>
 
-              {/* Profile Form */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      value={user.name}
-                      onChange={(e) => setUser({ ...user, name: e.target.value })}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
+              {/* Personal Information */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Personal Information</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Keep your contact details up to date
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="name"
+                        value={user.name}
+                        onChange={(e) => setUser({ ...user, name: e.target.value })}
+                        disabled={!isEditing}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={user.email}
+                        onChange={(e) => setUser({ ...user, email: e.target.value })}
+                        disabled={!isEditing}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        value={user.phone}
+                        onChange={(e) => setUser({ ...user, phone: e.target.value })}
+                        disabled={!isEditing}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Location</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="location"
+                        value={user.location}
+                        onChange={(e) => setUser({ ...user, location: e.target.value })}
+                        disabled={!isEditing}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={user.email}
-                      onChange={(e) => setUser({ ...user, email: e.target.value })}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      value={user.phone}
-                      onChange={(e) => setUser({ ...user, phone: e.target.value })}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="location"
-                      value={user.location}
-                      onChange={(e) => setUser({ ...user, location: e.target.value })}
-                      disabled={!isEditing}
-                      className="pl-10"
-                    />
-                  </div>
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    placeholder="Tell us about yourself..."
+                    value={user.bio}
+                    onChange={(e) => setUser({ ...user, bio: e.target.value })}
+                    disabled={!isEditing}
+                    rows={3}
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  placeholder="Tell us about yourself..."
-                  value={user.bio}
-                  onChange={(e) => setUser({ ...user, bio: e.target.value })}
-                  disabled={!isEditing}
-                  rows={3}
-                />
-              </div>
+              {/* Professional Details for Lawyer */}
+              {variant === "lawyer" && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Professional Details</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Highlight your qualifications and key cases
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Educational Details</Label>
+                        <p className="text-sm text-muted-foreground">
+                          List your academic qualifications
+                        </p>
+                      </div>
+                      {isEditing && (
+                        <Button type="button" variant="outline" size="sm" onClick={addNewEducation}>
+                          Add Education
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      {lawyerDetails.educationDetails.map((education, index) => (
+                        <div
+                          key={`education-${index}`}
+                          className="rounded-lg border border-border p-4 space-y-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-sm font-semibold text-muted-foreground">
+                              Education {index + 1}
+                            </h5>
+                            {isEditing && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeEducation(index)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label>Degree</Label>
+                              <Input
+                                value={education.degree}
+                                onChange={(e) => handleEducationChange(index, "degree", e.target.value)}
+                                disabled={!isEditing}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Institution</Label>
+                              <Input
+                                value={education.institution}
+                                onChange={(e) =>
+                                  handleEducationChange(index, "institution", e.target.value)
+                                }
+                                disabled={!isEditing}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Year</Label>
+                              <Input
+                                value={education.year}
+                                onChange={(e) => handleEducationChange(index, "year", e.target.value)}
+                                disabled={!isEditing}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {renderCaseInputs(
+                    lawyerDetails.currentCases,
+                    "currentCases",
+                    "Current Handle Cases",
+                    "Provide details of the cases you are currently managing",
+                    "Add Current Case",
+                  )}
+                  {renderCaseInputs(
+                    lawyerDetails.significantCases,
+                    "significantCases",
+                    "Significant Cases Handled",
+                    "List notable cases you have successfully handled",
+                    "Add Significant Case",
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2">
                 {isEditing ? (

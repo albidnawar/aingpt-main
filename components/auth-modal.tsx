@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { X } from "lucide-react"
+import { X, Loader2 } from "lucide-react"
 
 interface AuthModalProps {
   isOpen: boolean
@@ -21,6 +21,7 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   const [userType, setUserType] = useState<"user" | "lawyer">("user")
+  const [activeTab, setActiveTab] = useState<"login" | "signup">("login")
   const [loginData, setLoginData] = useState({
     emailOrLawyerId: "",
     password: "",
@@ -41,12 +42,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
     cellPhone: "",
     email: "",
     chamberAddress: "",
-    educationalDetails: "",
     yearsOfExperience: "",
-    significantCase1: "",
-    significantCase2: "",
-    significantCase3: "",
-    currentHandleMamla: "",
     lawPracticingPlace: "",
     consultationFee: "",
     password: "",
@@ -54,25 +50,165 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
     agreeToTerms: false,
   })
 
+  const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleUserLogin = async () => {
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginData.emailOrLawyerId, password: loginData.password }),
+      })
+      const body = await response.json()
+      if (!response.ok) {
+        setError(body.error ?? "Login failed. Please check your credentials.")
+        return
+      }
+      onLogin("user")
+      onClose()
+    } catch (err) {
+      setError("Unexpected error occurred while logging in.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleLawyerLogin = async () => {
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/auth/lawyer/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: loginData.emailOrLawyerId,
+          password: loginData.password,
+        }),
+      })
+      const body = await response.json()
+      if (!response.ok) {
+        setError(body.error ?? "Login failed. Please check your credentials.")
+        return
+      }
+      onLogin("lawyer")
+      onClose()
+    } catch (err) {
+      setError("Unexpected error occurred while logging in.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleUserSignup = async () => {
+    if (signupData.password !== signupData.confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+    if (!signupData.agreeToTerms) {
+      setError("Please agree to the Terms & Conditions.")
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: signupData.email,
+          password: signupData.password,
+          username: signupData.fullName,
+        }),
+      })
+      const body = await response.json()
+      if (!response.ok) {
+        if (typeof body.error === "string" && body.error.toLowerCase().includes("registered")) {
+          setError("An account with this email already exists. Please log in instead.")
+        } else {
+          setError(body.error ?? "Signup failed. Please try again.")
+        }
+        return
+      }
+      onLogin("user")
+      onClose()
+    } catch (err) {
+      setError("Unexpected error occurred while signing up.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleLawyerSignupRequest = async () => {
+    if (lawyerSignupData.password !== lawyerSignupData.confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+    if (!lawyerSignupData.agreeToTerms) {
+      setError("Please agree to the Terms & Conditions.")
+      return
+    }
+    if (!lawyerSignupData.type) {
+      setError("Please select a lawyer type.")
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/auth/lawyer/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lawyerId: lawyerSignupData.lawyerId,
+          type: lawyerSignupData.type,
+          cellPhone: lawyerSignupData.cellPhone,
+          email: lawyerSignupData.email,
+          chamberAddress: lawyerSignupData.chamberAddress,
+          yearsOfExperience: lawyerSignupData.yearsOfExperience,
+          lawPracticingPlace: lawyerSignupData.lawPracticingPlace,
+          consultationFee: lawyerSignupData.consultationFee,
+          password: lawyerSignupData.password,
+        }),
+      })
+      const body = await response.json()
+      if (!response.ok) {
+        setError(body.error ?? "Signup failed. Please try again.")
+        return
+      }
+      onLogin("lawyer")
+      onClose()
+    } catch (err) {
+      setError("Unexpected error occurred while signing up.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle login logic here
-    onLogin(userType)
-    onClose()
+    if (userType === "user") {
+      void handleUserLogin()
+      return
+    }
+    void handleLawyerLogin()
   }
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle signup logic here
-    onLogin(userType)
-    onClose()
+    if (userType === "user") {
+      void handleUserSignup()
+      return
+    }
+    void handleLawyerSignupRequest()
   }
 
   const handleLawyerSignup = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle lawyer signup logic here
-    onLogin("lawyer")
-    onClose()
+    void handleLawyerSignupRequest()
   }
 
   if (!isOpen) return null
@@ -80,7 +216,17 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
-        <Button variant="ghost" size="sm" className="absolute right-2 top-2 z-10" onClick={onClose}>
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-20 rounded-lg">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                {activeTab === "login" ? "Logging in..." : "Signing up..."}
+              </p>
+            </div>
+          </div>
+        )}
+        <Button variant="ghost" size="sm" className="absolute right-2 top-2 z-10" onClick={onClose} disabled={isSubmitting}>
           <X className="h-4 w-4" />
         </Button>
 
@@ -90,6 +236,11 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
         </CardHeader>
 
         <CardContent>
+          {error && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
           {/* User Type Selection */}
           <div className="mb-6">
             <Label className="mb-2 block">I am a:</Label>
@@ -99,6 +250,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                 variant={userType === "user" ? "default" : "outline"}
                 onClick={() => setUserType("user")}
                 className="w-full"
+                disabled={isSubmitting}
               >
                 Normal User
               </Button>
@@ -107,16 +259,17 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                 variant={userType === "lawyer" ? "default" : "outline"}
                 onClick={() => setUserType("lawyer")}
                 className="w-full"
+                disabled={isSubmitting}
               >
                 Lawyer
               </Button>
             </div>
           </div>
 
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          <Tabs defaultValue="login" className="w-full" onValueChange={(value) => setActiveTab(value as "login" | "signup")}>
+            <TabsList className="grid w-full grid-cols-2" disabled={isSubmitting}>
+              <TabsTrigger value="login" disabled={isSubmitting}>Login</TabsTrigger>
+              <TabsTrigger value="signup" disabled={isSubmitting}>Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="space-y-4">
@@ -132,6 +285,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                     value={loginData.emailOrLawyerId}
                     onChange={(e) => setLoginData({ ...loginData, emailOrLawyerId: e.target.value })}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
@@ -143,13 +297,21 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                     value={loginData.password}
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
                 <Button type="button" variant="link" className="p-0 h-auto text-sm">
                   Forgot Password?
                 </Button>
-                <Button type="submit" className="w-full">
-                  Log In
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Logging in...
+                    </>
+                  ) : (
+                    "Log In"
+                  )}
                 </Button>
               </form>
 
@@ -242,8 +404,15 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                       I agree to the Terms & Conditions
                     </Label>
                   </div>
-                  <Button type="submit" className="w-full" disabled={!signupData.agreeToTerms}>
-                    Sign Up
+                  <Button type="submit" className="w-full" disabled={!signupData.agreeToTerms || isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing up...
+                      </>
+                    ) : (
+                      "Sign Up"
+                    )}
                   </Button>
                 </form>
               ) : (
@@ -307,18 +476,6 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                         required
                       />
                     </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="lawyer-education">Educational Details</Label>
-                      <Textarea
-                        id="lawyer-education"
-                        placeholder="Enter your educational qualifications"
-                        value={lawyerSignupData.educationalDetails}
-                        onChange={(e) =>
-                          setLawyerSignupData({ ...lawyerSignupData, educationalDetails: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="lawyer-experience">Years of Experience</Label>
                       <Input
@@ -353,54 +510,6 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                         value={lawyerSignupData.consultationFee}
                         onChange={(e) =>
                           setLawyerSignupData({ ...lawyerSignupData, consultationFee: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lawyer-current-mamla">Current Handle Mamla</Label>
-                      <Input
-                        id="lawyer-current-mamla"
-                        placeholder="Enter current handle mamla"
-                        value={lawyerSignupData.currentHandleMamla}
-                        onChange={(e) =>
-                          setLawyerSignupData({ ...lawyerSignupData, currentHandleMamla: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lawyer-case1">Significant Case Handled #1</Label>
-                      <Input
-                        id="lawyer-case1"
-                        placeholder="Enter significant case details"
-                        value={lawyerSignupData.significantCase1}
-                        onChange={(e) =>
-                          setLawyerSignupData({ ...lawyerSignupData, significantCase1: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lawyer-case2">Significant Case Handled #2</Label>
-                      <Input
-                        id="lawyer-case2"
-                        placeholder="Enter significant case details"
-                        value={lawyerSignupData.significantCase2}
-                        onChange={(e) =>
-                          setLawyerSignupData({ ...lawyerSignupData, significantCase2: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lawyer-case3">Significant Case Handled #3</Label>
-                      <Input
-                        id="lawyer-case3"
-                        placeholder="Enter significant case details"
-                        value={lawyerSignupData.significantCase3}
-                        onChange={(e) =>
-                          setLawyerSignupData({ ...lawyerSignupData, significantCase3: e.target.value })
                         }
                         required
                       />
@@ -442,8 +551,15 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                       I agree to the Terms & Conditions
                     </Label>
                   </div>
-                  <Button type="submit" className="w-full" disabled={!lawyerSignupData.agreeToTerms}>
-                    Sign Up as Lawyer
+                  <Button type="submit" className="w-full" disabled={!lawyerSignupData.agreeToTerms || isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing up...
+                      </>
+                    ) : (
+                      "Sign Up as Lawyer"
+                    )}
                   </Button>
                 </form>
               )}

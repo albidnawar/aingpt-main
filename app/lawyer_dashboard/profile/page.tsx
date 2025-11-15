@@ -6,7 +6,7 @@ import { ProfileSection } from "@/components/profile-section"
 export default function LawyerProfilePage() {
   return (
     <LawyerDashboardLayout>
-      <ProfileSection />
+      <ProfileSection variant="lawyer" />
     </LawyerDashboardLayout>
   )
 }
