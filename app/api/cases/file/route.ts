@@ -55,6 +55,7 @@ export async function POST(req: Request) {
       relationship,
       description,
       files, // Array of file paths from Supabase Storage
+      isPublic, // Public/private status
     } = body
 
     // Validate required fields
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
         relationship: relationship || null,
         short_description: description || null,
         files: null, // Not using JSONB anymore
+        is_public: isPublic === true, // Store true for public, false for private
       })
       .select()
       .single()

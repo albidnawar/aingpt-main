@@ -18,7 +18,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { FileText, Plus, Eye, Trash2, Download, Users, Upload, X, Loader2 } from "lucide-react"
+import { FileText, Plus, Eye, Trash2, Download, Users, Upload, X, Loader2, Lock, Globe } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 
 interface CaseFile {
   id: string
@@ -39,6 +40,7 @@ interface CaseFile {
   status: "active" | "closed" | "pending"
   createdDate: string
   filesData?: any[] // Full file metadata from database
+  isPublic?: boolean // Public/private status
 }
 
 const mockCases: CaseFile[] = [
@@ -91,6 +93,7 @@ export default function MyCasesPage() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [selectedCase, setSelectedCase] = useState<CaseFile | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isPublic, setIsPublic] = useState(false)
   const [formData, setFormData] = useState({
     caseNumber: "",
     caseType: "",
@@ -181,6 +184,7 @@ export default function MyCasesPage() {
               interested: false, // TODO: Check from case_lawyer_interests table
               status: "active" as const, // TODO: Add status field to database
               createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
+              isPublic: c.is_public ?? false,
             }
           })
           setCases(transformedCases)
@@ -249,6 +253,7 @@ export default function MyCasesPage() {
         body: JSON.stringify({
           ...formData,
           files: filesData.length > 0 ? filesData : null,
+          isPublic: isPublic,
         }),
       })
 
@@ -285,6 +290,7 @@ export default function MyCasesPage() {
         interested: false,
         status: "active",
         createdDate: data.case.created_at ? new Date(data.case.created_at).toISOString().split("T")[0] : "",
+        isPublic: data.case.is_public ?? false,
       }
 
       setCases([newCase, ...cases])
@@ -302,6 +308,7 @@ export default function MyCasesPage() {
         relationship: "",
       })
       setUploadedFiles([])
+      setIsPublic(false)
       setIsFormOpen(false)
     } catch (err: any) {
       setError(err.message || "Failed to file case")
@@ -342,6 +349,31 @@ export default function MyCasesPage() {
     } catch (err: any) {
       console.error("Error downloading file:", err)
       setError(err.message || "Failed to download file")
+    }
+  }
+
+  const handleTogglePublic = async (caseId: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch(`/api/cases/${caseId}/visibility`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isPublic: !currentStatus }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to update case visibility" }))
+        throw new Error(errorData.error || "Failed to update case visibility")
+      }
+
+      // Update the case in the local state
+      setCases(
+        cases.map((c) => (c.id === caseId ? { ...c, isPublic: !currentStatus } : c)),
+      )
+    } catch (err: any) {
+      console.error("Error toggling case visibility:", err)
+      setError(err.message || "Failed to update case visibility")
     }
   }
 
@@ -526,6 +558,27 @@ export default function MyCasesPage() {
                   )}
                 </div>
 
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    {isPublic ? (
+                      <Globe className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <Lock className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <Label className="text-sm font-medium cursor-pointer">
+                        Make this case {isPublic ? "Public" : "Private"}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {isPublic
+                          ? "Case will be visible to lawyers"
+                          : "Case will only be visible to you"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+                </div>
+
                 {error && (
                   <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
                     <p className="text-sm text-destructive">{error}</p>
@@ -539,6 +592,7 @@ export default function MyCasesPage() {
                       setIsFormOpen(false)
                       setError(null)
                       setUploadedFiles([])
+                      setIsPublic(false)
                     }}
                     disabled={isSubmitting}
                   >
@@ -693,19 +747,37 @@ export default function MyCasesPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleViewCase(caseFile)}>
-                      <Eye className="h-4 w-4 mr-1" />
-                      View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive bg-transparent"
-                      onClick={() => handleDeleteCase(caseFile.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      {caseFile.isPublic ? (
+                        <Globe className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Lock className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={caseFile.isPublic ?? false}
+                          onCheckedChange={() => handleTogglePublic(caseFile.id, caseFile.isPublic ?? false)}
+                        />
+                        <Label className="text-xs text-muted-foreground cursor-pointer">
+                          {caseFile.isPublic ? "Public" : "Private"}
+                        </Label>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleViewCase(caseFile)}>
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive bg-transparent"
+                        onClick={() => handleDeleteCase(caseFile.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>

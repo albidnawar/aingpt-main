@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -80,66 +81,6 @@ interface SuggestedLawyer {
   consultationFee: number
 }
 
-// Mock data for user's cases (from my-cases)
-const mockUserCases: CaseFile[] = [
-  {
-    id: "1",
-    caseNumber: "2024-001",
-    caseType: "Civil",
-    thanaName: "Gulshan Thana",
-    caseName: "Property Dispute",
-    dharaNumber: "5",
-    caseTitle: "Land ownership dispute",
-    registerDate: "2024-01-15",
-    description: "Property boundary dispute with neighbor regarding 500 square feet of land",
-    bpFormNo: "BP-2024-001",
-    casePersons: "Ahmed Rahman vs Fatima Khan",
-    relationship: "Property Owner",
-    documents: ["deed.pdf", "survey_report.pdf"],
-    views: 12,
-    interested: true,
-    status: "active",
-    createdDate: "2024-01-15",
-  },
-  {
-    id: "2",
-    caseNumber: "2024-002",
-    caseType: "Criminal",
-    thanaName: "Mirpur Thana",
-    caseName: "Assault Case",
-    dharaNumber: "294",
-    caseTitle: "Public assault incident",
-    registerDate: "2024-02-01",
-    description: "Assault case during neighborhood dispute",
-    bpFormNo: "BP-2024-002",
-    casePersons: "State vs Mohammad Hassan",
-    relationship: "Victim",
-    documents: ["fir.pdf", "medical_report.pdf", "witness_statement.pdf"],
-    views: 5,
-    interested: false,
-    status: "pending",
-    createdDate: "2024-02-01",
-  },
-  {
-    id: "3",
-    caseNumber: "2024-003",
-    caseType: "Civil",
-    thanaName: "Dhanmondi Thana",
-    caseName: "Employment Dispute",
-    dharaNumber: "10",
-    caseTitle: "Contract violation",
-    registerDate: "2024-02-10",
-    description: "Employment contract dispute with employer",
-    bpFormNo: "BP-2024-003",
-    casePersons: "Employee vs Company",
-    relationship: "Employee",
-    documents: ["contract.pdf", "termination_letter.pdf"],
-    views: 8,
-    interested: false,
-    status: "active",
-    createdDate: "2024-02-10",
-  },
-]
 
 const mockDocuments: DocumentFile[] = [
   {
@@ -200,6 +141,82 @@ export default function AdvancedChatPage() {
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [isCasesDrawerOpen, setIsCasesDrawerOpen] = useState(false)
   const [isLawyersDrawerOpen, setIsLawyersDrawerOpen] = useState(false)
+  const [userCases, setUserCases] = useState<CaseFile[]>([])
+  const [isLoadingCases, setIsLoadingCases] = useState(true)
+
+  // Fetch user's cases from database
+  useEffect(() => {
+    const fetchUserCases = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session?.user) {
+          setIsLoadingCases(false)
+          return
+        }
+
+        // Get user_id from users table
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("id")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (userError || !userData) {
+          setIsLoadingCases(false)
+          return
+        }
+
+        // Fetch cases for this user
+        const { data: casesData, error: casesError } = await supabase
+          .from("cases")
+          .select(`
+            *,
+            case_documents (
+              id,
+              document_path
+            )
+          `)
+          .eq("user_id", userData.id)
+          .order("created_at", { ascending: false })
+
+        if (!casesError && casesData) {
+          const transformedCases: CaseFile[] = casesData.map((c: any) => ({
+            id: String(c.id),
+            caseNumber: c.case_number,
+            caseType: c.case_type || "",
+            thanaName: c.thana_name || "",
+            caseName: c.case_name_dhara || "",
+            dharaNumber: c.dhara_number || "",
+            caseTitle: c.case_title || "",
+            registerDate: c.register_date || "",
+            description: c.short_description || "",
+            bpFormNo: c.bp_form_no || "",
+            casePersons: c.case_persons || "",
+            relationship: c.relationship || "",
+            documents: (c.case_documents || []).map((doc: any) => {
+              const parts = doc.document_path.split('/')
+              return parts[parts.length - 1].replace(/^\d+-/, '')
+            }),
+            views: 0,
+            interested: false,
+            status: "active" as const,
+            createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
+          }))
+          setUserCases(transformedCases)
+        }
+      } catch (err) {
+        console.error("Error fetching user cases:", err)
+      } finally {
+        setIsLoadingCases(false)
+      }
+    }
+
+    fetchUserCases()
+  }, [])
 
   const handleSelectCaseFromDialog = (caseFile: CaseFile) => {
     const chatCase: ChatCase = {
@@ -378,7 +395,16 @@ export default function AdvancedChatPage() {
                 <DialogDescription>Choose from your existing cases to start a new chat session</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 mt-4">
-                {mockUserCases.map((caseFile) => (
+                {isLoadingCases ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Loading your cases...</p>
+                  </div>
+                ) : userCases.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No cases found. Please file a case first.</p>
+                  </div>
+                ) : (
+                  userCases.map((caseFile) => (
                   <Card
                     key={caseFile.id}
                     className="cursor-pointer hover:shadow-lg transition-shadow"
@@ -403,7 +429,8 @@ export default function AdvancedChatPage() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                )}
               </div>
             </DialogContent>
           </Dialog>
