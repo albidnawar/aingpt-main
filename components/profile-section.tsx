@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { User, Mail, Phone, MapPin, Calendar, Crown, Bell, Shield, Download, Star } from "lucide-react"
+import { User, Mail, Phone, MapPin, Calendar, Crown, Bell, Shield, Download, Star, Loader2, ZoomIn, ZoomOut, Move } from "lucide-react"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface UserProfile {
   name: string
@@ -118,6 +126,20 @@ const subscriptionPlans = [
 export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
   const [user, setUser] = useState<UserProfile>(mockUser)
   const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isCropDialogOpen, setIsCropDialogOpen] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [notifications, setNotifications] = useState({
     email: true,
     sms: false,
@@ -173,6 +195,65 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
 
   const [activeTab, setActiveTab] = useState("profile")
 
+  // Fetch user data from Supabase
+  useEffect(() => {
+    if (variant === "user") {
+      const fetchUserData = async () => {
+        try {
+          setIsLoading(true)
+          setError(null)
+          const supabase = createSupabaseBrowserClient()
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+
+          if (!session?.user) {
+            setError("Please log in to view your profile")
+            setIsLoading(false)
+            return
+          }
+
+          // Get user_id from users table
+          const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select("*")
+            .eq("auth_user_id", session.user.id)
+            .maybeSingle()
+
+          if (userError) {
+            console.error("Error fetching user data:", userError)
+            setError("Failed to load profile data")
+            setIsLoading(false)
+            return
+          }
+
+          if (userData) {
+            // Map database fields to UI state
+            setUser({
+              name: userData.full_name || userData.username || "",
+              email: userData.email || "",
+              phone: userData.phone || "",
+              location: userData.location || "",
+              joinDate: "Recently", // Users table doesn't have created_at, can be added later if needed
+              subscription: (userData.subscription_plan as "Free" | "Bronze" | "Gold") || "Free",
+              avatar: userData.avatar_url || undefined,
+              bio: userData.bio || "",
+            })
+          }
+        } catch (err) {
+          console.error("Error fetching user data:", err)
+          setError("Failed to load profile data")
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      fetchUserData()
+    } else {
+      setIsLoading(false)
+    }
+  }, [variant])
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const tab = urlParams.get("tab")
@@ -181,14 +262,284 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
     }
   }, [])
 
-  const handleSave = () => {
-    setIsEditing(false)
-    // Save user data
+  const handleSave = async () => {
+    if (variant !== "user") {
+      setIsEditing(false)
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      setError(null)
+      const supabase = createSupabaseBrowserClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        setError("Please log in to save your profile")
+        setIsSaving(false)
+        return
+      }
+
+      // Get user_id from users table
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle()
+
+      if (userError || !userData) {
+        setError("User not found")
+        setIsSaving(false)
+        return
+      }
+
+      // Update user data in Supabase
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({
+          full_name: user.name,
+          email: user.email,
+          phone: user.phone || null,
+          location: user.location || null,
+          bio: user.bio || null,
+          avatar_url: user.avatar || null,
+        })
+        .eq("id", userData.id)
+
+      if (updateError) {
+        console.error("Error updating user data:", updateError)
+        setError("Failed to save profile. Please try again.")
+        setIsSaving(false)
+        return
+      }
+
+      setIsEditing(false)
+      // Show success message (you can add a toast notification here)
+    } catch (err) {
+      console.error("Error saving user data:", err)
+      setError("Failed to save profile. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleUpgrade = (plan: string) => {
     // Handle subscription upgrade
     console.log(`Upgrading to ${plan}`)
+  }
+
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setError('Invalid file type. Only JPG, PNG, GIF, and WEBP are allowed.')
+      return
+    }
+
+    // Validate file size (2MB max)
+    const maxSize = 2 * 1024 * 1024 // 2MB
+    if (file.size > maxSize) {
+      setError('File size exceeds 2MB limit.')
+      return
+    }
+
+    // Create preview URL and open crop dialog
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setSelectedImage(e.target?.result as string)
+      setImageFile(file)
+      setZoom(1)
+      setPosition({ x: 0, y: 0 })
+      setIsCropDialogOpen(true)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCropAndUpload = async () => {
+    if (!selectedImage || !imageFile) return
+
+    try {
+      setIsUploadingAvatar(true)
+      setError(null)
+
+      // Create canvas for cropping
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('Failed to get canvas context')
+
+      const img = new Image()
+      img.src = selectedImage
+
+      await new Promise((resolve, reject) => {
+        img.onload = () => {
+          const cropSize = 400 // Final output size (square)
+          const cropDiameter = 300 // Visible crop circle diameter in preview
+          canvas.width = cropSize
+          canvas.height = cropSize
+
+          // Get actual container and image element dimensions
+          const container = containerRef.current
+          const displayedImg = imageRef.current
+          
+          if (!container || !displayedImg) {
+            reject(new Error('Container or image not found'))
+            return
+          }
+
+          // Get container dimensions
+          const containerWidth = container.offsetWidth
+          const containerHeight = container.offsetHeight
+          const containerCenterX = containerWidth / 2
+          const containerCenterY = containerHeight / 2
+          const cropRadius = cropDiameter / 2
+
+          // Get natural (original) image dimensions
+          const naturalWidth = img.naturalWidth || img.width
+          const naturalHeight = img.naturalHeight || img.height
+          
+          // Get the displayed image dimensions (actual rendered size)
+          // Note: getBoundingClientRect gives us the transformed size
+          const imageRect = displayedImg.getBoundingClientRect()
+          const displayedWidth = imageRect.width
+          const displayedHeight = imageRect.height
+          
+          // Calculate scale: from natural to displayed (accounting for zoom)
+          // The displayed size already includes the zoom transform
+          const scaleX = displayedWidth / naturalWidth
+          const scaleY = displayedHeight / naturalHeight
+          // Since we use object-contain, the scale is uniform
+          const totalScale = Math.min(scaleX, scaleY)
+          
+          // The crop circle is fixed at container center (containerCenterX, containerCenterY)
+          // The image is centered at container center, then transformed by translate(position) scale(zoom)
+          // So the image center after transform is at (containerCenterX + position.x, containerCenterY + position.y)
+          
+          // To find what part of the original image is at the crop center:
+          // 1. Find the offset from image center to crop center (in container coordinates)
+          const offsetFromImageCenterX = -position.x  // Crop is at container center, image moved by position.x
+          const offsetFromImageCenterY = -position.y
+          
+          // 2. Convert this offset to original image coordinates
+          const offsetInOriginalX = offsetFromImageCenterX / totalScale
+          const offsetInOriginalY = offsetFromImageCenterY / totalScale
+          
+          // 3. The image center in original coordinates
+          const imageCenterOriginalX = naturalWidth / 2
+          const imageCenterOriginalY = naturalHeight / 2
+          
+          // 4. The crop center in original coordinates
+          const cropCenterOriginalX = imageCenterOriginalX + offsetInOriginalX
+          const cropCenterOriginalY = imageCenterOriginalY + offsetInOriginalY
+          
+          // 5. The crop radius in original coordinates
+          const cropRadiusInOriginal = cropRadius / totalScale
+          
+          // Calculate source rectangle
+          const sourceX = cropCenterOriginalX - cropRadiusInOriginal
+          const sourceY = cropCenterOriginalY - cropRadiusInOriginal
+          const sourceSize = cropRadiusInOriginal * 2
+
+          // Clamp to image bounds
+          const clampedSourceX = Math.max(0, Math.min(sourceX, naturalWidth - sourceSize))
+          const clampedSourceY = Math.max(0, Math.min(sourceY, naturalHeight - sourceSize))
+          const clampedSourceSize = Math.min(
+            sourceSize,
+            naturalWidth - clampedSourceX,
+            naturalHeight - clampedSourceY
+          )
+
+          // Draw with circular clipping
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(cropSize / 2, cropSize / 2, cropSize / 2, 0, 2 * Math.PI)
+          ctx.clip()
+
+          // Draw the cropped portion, scaled to fill the output
+          ctx.drawImage(
+            img,
+            clampedSourceX,
+            clampedSourceY,
+            clampedSourceSize,
+            clampedSourceSize,
+            0,
+            0,
+            cropSize,
+            cropSize
+          )
+          ctx.restore()
+          
+          resolve(null)
+        }
+        img.onerror = reject
+      })
+
+      // Convert canvas to blob
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setError('Failed to process image')
+          setIsUploadingAvatar(false)
+          return
+        }
+
+        // Create file from blob
+        const croppedFile = new File([blob], imageFile.name, { type: imageFile.type })
+
+        const formData = new FormData()
+        formData.append('file', croppedFile)
+
+        const response = await fetch('/api/profile/avatar', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to upload avatar')
+        }
+
+        // Update user state with new avatar URL
+        setUser({ ...user, avatar: data.url })
+        setIsCropDialogOpen(false)
+        setSelectedImage(null)
+        setImageFile(null)
+      }, imageFile.type, 0.9)
+    } catch (err) {
+      console.error('Error uploading avatar:', err)
+      setError(err instanceof Error ? err.message : 'Failed to upload avatar. Please try again.')
+    } finally {
+      setIsUploadingAvatar(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true)
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y })
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return
+    setPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    })
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleChangePhotoClick = () => {
+    fileInputRef.current?.click()
   }
 
   const handleCaseChange = (
@@ -377,7 +728,15 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6">
-          <Card>
+          {isLoading ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Loading profile...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
             <CardHeader>
               <CardTitle>Profile & Professional Information</CardTitle>
               <CardDescription>
@@ -399,12 +758,153 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="space-y-2">
-                  <Button variant="outline" size="sm">
-                    Change Photo
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                    disabled={isUploadingAvatar || variant !== "user"}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleChangePhotoClick}
+                    disabled={isUploadingAvatar || variant !== "user"}
+                  >
+                    {isUploadingAvatar ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      "Change Photo"
+                    )}
                   </Button>
-                  <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max size 2MB.</p>
+                  <p className="text-xs text-muted-foreground">JPG, PNG, GIF or WEBP. Max size 2MB.</p>
                 </div>
               </div>
+
+              {/* Avatar Crop Dialog */}
+              <Dialog open={isCropDialogOpen} onOpenChange={setIsCropDialogOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Adjust Avatar</DialogTitle>
+                    <DialogDescription>
+                      Drag to reposition and use the slider to zoom in/out
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {/* Image Container */}
+                    <div
+                      ref={containerRef}
+                      className="relative w-full h-96 bg-muted rounded-lg overflow-hidden border-2 border-border"
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                    >
+                      <div
+                        className="absolute inset-0 flex items-center justify-center cursor-move"
+                        style={{
+                          transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
+                          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                        }}
+                        onMouseDown={handleMouseDown}
+                      >
+                        {selectedImage && (
+                          <img
+                            ref={imageRef}
+                            src={selectedImage}
+                            alt="Preview"
+                            className="max-w-full max-h-full w-auto h-auto select-none object-contain"
+                            style={{ minWidth: '100%', minHeight: '100%' }}
+                            draggable={false}
+                            onLoad={() => {
+                              // Reset position when image loads
+                              if (imageRef.current) {
+                                const img = imageRef.current
+                                const container = containerRef.current
+                                if (container) {
+                                  // Center the image initially
+                                  setPosition({ x: 0, y: 0 })
+                                }
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                      {/* Crop Overlay */}
+                      <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute inset-0 bg-black/50" />
+                        <div
+                          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-4 border-white rounded-full shadow-lg"
+                          style={{ width: '300px', height: '300px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2">
+                            <ZoomIn className="h-4 w-4" />
+                            Zoom: {Math.round(zoom * 100)}%
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <ZoomOut className="h-4 w-4 text-muted-foreground" />
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="3"
+                            step="0.1"
+                            value={zoom}
+                            onChange={(e) => setZoom(parseFloat(e.target.value))}
+                            className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                          />
+                          <ZoomIn className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Move className="h-4 w-4" />
+                        <span>Click and drag the image to reposition</span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsCropDialogOpen(false)
+                          setSelectedImage(null)
+                          setImageFile(null)
+                          setZoom(1)
+                          setPosition({ x: 0, y: 0 })
+                        }}
+                        disabled={isUploadingAvatar}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleCropAndUpload}
+                        disabled={isUploadingAvatar}
+                      >
+                        {isUploadingAvatar ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          "Save Avatar"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Personal Information */}
               <div className="space-y-4">
@@ -576,23 +1076,48 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
                 </div>
               )}
 
+              {error && (
+                <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 {isEditing ? (
                   <>
-                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditing(false)
+                        setError(null)
+                      }}
+                      disabled={isSaving}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleSave}>Save Changes</Button>
+                    <Button onClick={handleSave} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save Changes"
+                      )}
+                    </Button>
                   </>
                 ) : (
-                  <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
+                  <Button onClick={() => setIsEditing(true)} disabled={isLoading}>
+                    Edit Profile
+                  </Button>
                 )}
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Account Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {!isLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
@@ -627,6 +1152,7 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
               </CardContent>
             </Card>
           </div>
+          )}
         </TabsContent>
 
         {/* Subscription Tab */}

@@ -1,8 +1,7 @@
 "use client"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { LawyerDirectory } from "@/components/lawyer-directory"
-import { Card, CardContent } from "@/components/ui/card"
-import { Users, Search, Filter, MapPin } from "lucide-react"
+import { Users } from "lucide-react"
 
 export default function LawyersPage() {
   return (
@@ -17,54 +16,6 @@ export default function LawyersPage() {
             </h1>
             <p className="text-muted-foreground">Find and connect with qualified legal professionals</p>
           </div>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Lawyers</p>
-                  <p className="text-2xl font-bold">1,247</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Practice Areas</p>
-                  <p className="text-2xl font-bold">15</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Cities Covered</p>
-                  <p className="text-2xl font-bold">64</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Available Now</p>
-                  <p className="text-2xl font-bold">342</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Lawyer Directory */}

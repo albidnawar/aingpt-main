@@ -94,6 +94,9 @@ export default function MyCasesPage() {
   const [selectedCase, setSelectedCase] = useState<CaseFile | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [caseToDelete, setCaseToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [formData, setFormData] = useState({
     caseNumber: "",
     caseType: "",
@@ -319,7 +322,50 @@ export default function MyCasesPage() {
   }
 
   const handleDeleteCase = (id: string) => {
-    setCases(cases.filter((c) => c.id !== id))
+    setCaseToDelete(id)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDeleteCase = async () => {
+    if (!caseToDelete) {
+      console.error('No case ID to delete')
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      setError(null)
+
+      console.log('Attempting to delete case:', caseToDelete)
+      const response = await fetch(`/api/cases/${caseToDelete}`, {
+        method: 'DELETE',
+      })
+
+      console.log('Delete response status:', response.status)
+      const data = await response.json()
+      console.log('Delete response data:', data)
+
+      if (!response.ok) {
+        console.error('Delete error response:', data)
+        throw new Error(data.error || 'Failed to delete case')
+      }
+
+      // Remove case from local state
+      setCases(cases.filter((c) => c.id !== caseToDelete))
+      setDeleteConfirmOpen(false)
+      setCaseToDelete(null)
+      setError(null)
+      
+      // Show success message (optional)
+      console.log('Case deleted successfully')
+    } catch (err) {
+      console.error('Error deleting case:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete case. Please try again.'
+      setError(errorMessage)
+      // Keep dialog open on error so user can see the error
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleViewCase = (caseFile: CaseFile) => {
@@ -931,6 +977,56 @@ export default function MyCasesPage() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={(open) => {
+          setDeleteConfirmOpen(open)
+          if (!open) {
+            setCaseToDelete(null)
+            setError(null)
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Case</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this case? This action cannot be undone. All associated documents will also be deleted.
+              </DialogDescription>
+            </DialogHeader>
+            {error && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteConfirmOpen(false)
+                  setCaseToDelete(null)
+                  setError(null)
+                }}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteCase}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Yes, Delete"
+                )}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

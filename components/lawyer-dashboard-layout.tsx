@@ -10,7 +10,6 @@ import {
   MessageCircle,
   FileText,
   Users,
-  BookOpen,
   User,
   Menu,
   X,
@@ -60,18 +59,6 @@ const navigation = [
     href: "/lawyer_dashboard/accepted-cases-chat",
     icon: MessageCircle,
     description: "Chat with accepted lawyers",
-  },
-  {
-    name: "Content",
-    href: "/lawyer_dashboard/content",
-    icon: BookOpen,
-    description: "Videos & books library",
-  },
-  {
-    name: "Laws & Regulations",
-    href: "/lawyer_dashboard/laws",
-    icon: Scale,
-    description: "Legal documents & files",
   },
   {
     name: "Profile",
