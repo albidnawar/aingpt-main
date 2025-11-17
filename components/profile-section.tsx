@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { User, Mail, Phone, MapPin, Calendar, Crown, Bell, Shield, Download, Star, Loader2, ZoomIn, ZoomOut, Move } from "lucide-react"
+import { User, Mail, Phone, MapPin, Crown, Bell, Shield, Download, Loader2, ZoomIn, ZoomOut, Move } from "lucide-react"
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
 import {
   Dialog,
@@ -1115,44 +1115,6 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
           </Card>
           )}
 
-          {/* Account Stats */}
-          {!isLoading && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-accent" />
-                  <div>
-                    <p className="text-sm font-medium">Member Since</p>
-                    <p className="text-xs text-muted-foreground">{user.joinDate}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-accent" />
-                  <div>
-                    <p className="text-sm font-medium">Messages Sent</p>
-                    <p className="text-xs text-muted-foreground">1,247 total</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2">
-                  <Download className="h-4 w-4 text-accent" />
-                  <div>
-                    <p className="text-sm font-medium">Documents Analyzed</p>
-                    <p className="text-xs text-muted-foreground">23 this month</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          )}
         </TabsContent>
 
         {/* Subscription Tab */}

@@ -35,7 +35,6 @@ interface CaseFile {
   casePersons: string
   relationship: string
   documents: string[] | any[]
-  views: number
   interested: boolean
   status: "active" | "closed" | "pending"
   createdDate: string
@@ -58,7 +57,6 @@ const mockCases: CaseFile[] = [
     casePersons: "Ahmed Rahman vs Fatima Khan",
     relationship: "Property Owner",
     documents: ["deed.pdf", "survey_report.pdf"],
-    views: 12,
     interested: true,
     status: "active",
     createdDate: "2024-01-15",
@@ -77,7 +75,6 @@ const mockCases: CaseFile[] = [
     casePersons: "State vs Mohammad Hassan",
     relationship: "Victim",
     documents: ["fir.pdf", "medical_report.pdf", "witness_statement.pdf"],
-    views: 5,
     interested: false,
     status: "pending",
     createdDate: "2024-02-01",
@@ -183,7 +180,6 @@ export default function MyCasesPage() {
               relationship: c.relationship || "",
               documents: documentNames,
               filesData: documentPaths, // Store full paths for download
-              views: 0, // TODO: Calculate from case_views table
               interested: false, // TODO: Check from case_lawyer_interests table
               status: "active" as const, // TODO: Add status field to database
               createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
@@ -289,7 +285,6 @@ export default function MyCasesPage() {
         relationship: data.case.relationship || "",
         documents: documentNames,
         filesData: filesData, // Store full paths for download
-        views: 0,
         interested: false,
         status: "active",
         createdDate: data.case.created_at ? new Date(data.case.created_at).toISOString().split("T")[0] : "",
@@ -665,7 +660,7 @@ export default function MyCasesPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
@@ -673,17 +668,6 @@ export default function MyCasesPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Cases</p>
                   <p className="text-2xl font-bold">{cases.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Eye className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Views</p>
-                  <p className="text-2xl font-bold">{cases.reduce((sum, c) => sum + c.views, 0)}</p>
                 </div>
               </div>
             </CardContent>
@@ -782,10 +766,6 @@ export default function MyCasesPage() {
 
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Eye className="h-4 w-4" />
-                      {caseFile.views} views
-                    </div>
                     {caseFile.interested && (
                       <div className="flex items-center gap-1 text-green-600">
                         <Users className="h-4 w-4" />
@@ -912,10 +892,6 @@ export default function MyCasesPage() {
                   <div>
                     <Label className="text-muted-foreground">Filed Date</Label>
                     <p className="font-medium">{selectedCase.createdDate}</p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Views</Label>
-                    <p className="font-medium">{selectedCase.views}</p>
                   </div>
                 </div>
 
