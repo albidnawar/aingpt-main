@@ -13,16 +13,18 @@ import {
   User,
   Menu,
   X,
-  Settings,
   Crown,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Search,
+  Bell,
+  Coins,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 interface LawyerDashboardLayoutProps {
   children: React.ReactNode
@@ -71,6 +73,7 @@ const navigation = [
 export function LawyerDashboardLayout({ children }: LawyerDashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -79,6 +82,36 @@ export function LawyerDashboardLayout({ children }: LawyerDashboardLayoutProps) 
     if (savedCollapsed) {
       setCollapsed(savedCollapsed === "true")
     }
+  }, [])
+
+  // Fetch token balance
+  useEffect(() => {
+    const fetchTokenBalance = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session?.user) {
+          return
+        }
+
+        const { data: lawyerData, error } = await supabase
+          .from("lawyers")
+          .select("token_balance")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (!error && lawyerData) {
+          setTokenBalance(lawyerData.token_balance || 0)
+        }
+      } catch (err) {
+        console.error("Error fetching token balance:", err)
+      }
+    }
+
+    fetchTokenBalance()
   }, [])
 
   const toggleCollapsed = () => {
@@ -222,14 +255,15 @@ export function LawyerDashboardLayout({ children }: LawyerDashboardLayoutProps) 
             <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 ml-auto">
               <ThemeToggle />
-              <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
+              <Button variant="outline" size="sm" className="gap-2">
+                <Coins className="h-4 w-4" />
+                <span className="font-medium">{tokenBalance !== null ? tokenBalance : "..."}</span>
               </Button>
-              <Button className="bg-accent hover:bg-accent/90" onClick={handleUpgrade}>
-                Subscribe
+              <Button variant="ghost" size="sm" className="relative">
+                <Bell className="h-4 w-4" />
+                <span className="sr-only">Notifications</span>
               </Button>
             </div>
           </div>

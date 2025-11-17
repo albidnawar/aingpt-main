@@ -29,6 +29,7 @@ interface UserProfile {
   subscription: "Free" | "Bronze" | "Gold"
   avatar?: string
   bio?: string
+  lawyerId?: string // For lawyers only
 }
 
 interface LawyerCaseDetail {
@@ -249,6 +250,114 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
       }
 
       fetchUserData()
+    } else if (variant === "lawyer") {
+      const fetchLawyerData = async () => {
+        try {
+          setIsLoading(true)
+          setError(null)
+          const supabase = createSupabaseBrowserClient()
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+
+          if (!session?.user) {
+            setError("Please log in to view your profile")
+            setIsLoading(false)
+            return
+          }
+
+          // Get lawyer_id from lawyers table
+          const { data: lawyerData, error: lawyerError } = await supabase
+            .from("lawyers")
+            .select("*")
+            .eq("auth_user_id", session.user.id)
+            .maybeSingle()
+
+          if (lawyerError) {
+            console.error("Error fetching lawyer data:", lawyerError)
+            setError("Failed to load profile data")
+            setIsLoading(false)
+            return
+          }
+
+          if (lawyerData) {
+            // Map database fields to UI state
+            setUser({
+              name: lawyerData.full_name || "",
+              email: lawyerData.email || "",
+              phone: lawyerData.phone || "",
+              location: lawyerData.law_practicing_place || lawyerData.chamber_address || "",
+              joinDate: lawyerData.created_at ? new Date(lawyerData.created_at).toLocaleDateString() : "Recently",
+              subscription: "Free", // Lawyers don't have subscription plans in the current schema
+              avatar: lawyerData.avatar_url || undefined,
+              bio: "",
+              lawyerId: lawyerData.lawyer_id || "",
+            })
+
+            // Fetch education details
+            const { data: educationData, error: educationError } = await supabase
+              .from("lawyer_education_details")
+              .select("*")
+              .eq("lawyer_id", lawyerData.id)
+              .order("created_at", { ascending: true })
+
+            if (!educationError && educationData) {
+              const educationDetails: LawyerEducationDetail[] = educationData.map((edu) => ({
+                degree: edu.degree || "",
+                institution: edu.institution || "",
+                year: edu.graduation_year || "",
+              }))
+              setLawyerDetails((prev) => ({ ...prev, educationDetails }))
+            }
+
+            // Fetch cases
+            const { data: casesData, error: casesError } = await supabase
+              .from("lawyer_cases")
+              .select("*")
+              .eq("lawyer_id", lawyerData.id)
+              .order("created_at", { ascending: true })
+
+            if (!casesError && casesData) {
+              const currentCases: LawyerCaseDetail[] = casesData
+                .filter((c) => c.case_type === "current")
+                .map((c) => ({
+                  policeStation: c.police_station || "",
+                  district: c.district || "",
+                  caseNumber: c.case_number || "",
+                  lawNameAndSection: c.law_name_and_section || "",
+                  filingDate: c.filing_date || "",
+                  yearlyNumber: c.yearly_number || "",
+                  crimeTitle: c.crime_title || "",
+                }))
+
+              const significantCases: LawyerCaseDetail[] = casesData
+                .filter((c) => c.case_type === "significant")
+                .map((c) => ({
+                  policeStation: c.police_station || "",
+                  district: c.district || "",
+                  caseNumber: c.case_number || "",
+                  lawNameAndSection: c.law_name_and_section || "",
+                  filingDate: c.filing_date || "",
+                  yearlyNumber: c.yearly_number || "",
+                  crimeTitle: c.crime_title || "",
+                }))
+
+              setLawyerDetails((prev) => ({
+                ...prev,
+                currentCases,
+                significantCases,
+              }))
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching lawyer data:", err)
+          setError("Failed to load profile data")
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      fetchLawyerData()
     } else {
       setIsLoading(false)
     }
@@ -263,11 +372,6 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
   }, [])
 
   const handleSave = async () => {
-    if (variant !== "user") {
-      setIsEditing(false)
-      return
-    }
-
     try {
       setIsSaving(true)
       setError(null)
@@ -282,43 +386,164 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
         return
       }
 
-      // Get user_id from users table
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("auth_user_id", session.user.id)
-        .maybeSingle()
+      if (variant === "user") {
+        // Get user_id from users table
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("id")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
 
-      if (userError || !userData) {
-        setError("User not found")
-        setIsSaving(false)
-        return
-      }
+        if (userError || !userData) {
+          setError("User not found")
+          setIsSaving(false)
+          return
+        }
 
-      // Update user data in Supabase
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
-          full_name: user.name,
-          email: user.email,
-          phone: user.phone || null,
-          location: user.location || null,
-          bio: user.bio || null,
-          avatar_url: user.avatar || null,
-        })
-        .eq("id", userData.id)
+        // Update user data in Supabase
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({
+            full_name: user.name,
+            email: user.email,
+            phone: user.phone || null,
+            location: user.location || null,
+            bio: user.bio || null,
+            avatar_url: user.avatar || null,
+          })
+          .eq("id", userData.id)
 
-      if (updateError) {
-        console.error("Error updating user data:", updateError)
-        setError("Failed to save profile. Please try again.")
-        setIsSaving(false)
-        return
+        if (updateError) {
+          console.error("Error updating user data:", updateError)
+          setError("Failed to save profile. Please try again.")
+          setIsSaving(false)
+          return
+        }
+      } else if (variant === "lawyer") {
+        // Get lawyer_id from lawyers table
+        const { data: lawyerData, error: lawyerError } = await supabase
+          .from("lawyers")
+          .select("id")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (lawyerError || !lawyerData) {
+          setError("Lawyer not found")
+          setIsSaving(false)
+          return
+        }
+
+        // Update lawyer basic data in Supabase
+        const { error: updateError } = await supabase
+          .from("lawyers")
+          .update({
+            full_name: user.name || null,
+            email: user.email,
+            phone: user.phone || null,
+            chamber_address: user.location || null,
+            law_practicing_place: user.location || null,
+            avatar_url: user.avatar || null,
+          })
+          .eq("id", lawyerData.id)
+
+        if (updateError) {
+          console.error("Error updating lawyer data:", updateError)
+          setError("Failed to save profile. Please try again.")
+          setIsSaving(false)
+          return
+        }
+
+        // Update education details
+        // First, delete all existing education records
+        const { error: deleteEducationError } = await supabase
+          .from("lawyer_education_details")
+          .delete()
+          .eq("lawyer_id", lawyerData.id)
+
+        if (deleteEducationError) {
+          console.error("Error deleting education details:", deleteEducationError)
+        } else {
+          // Insert new education records
+          if (lawyerDetails.educationDetails.length > 0) {
+            const educationRecords = lawyerDetails.educationDetails
+              .filter((edu) => edu.degree && edu.institution)
+              .map((edu) => ({
+                lawyer_id: lawyerData.id,
+                degree: edu.degree,
+                institution: edu.institution,
+                graduation_year: edu.year || null,
+              }))
+
+            if (educationRecords.length > 0) {
+              const { error: insertEducationError } = await supabase
+                .from("lawyer_education_details")
+                .insert(educationRecords)
+
+              if (insertEducationError) {
+                console.error("Error inserting education details:", insertEducationError)
+              }
+            }
+          }
+        }
+
+        // Update cases
+        // First, delete all existing case records
+        const { error: deleteCasesError } = await supabase
+          .from("lawyer_cases")
+          .delete()
+          .eq("lawyer_id", lawyerData.id)
+
+        if (deleteCasesError) {
+          console.error("Error deleting cases:", deleteCasesError)
+        } else {
+          // Insert current cases
+          const currentCaseRecords = lawyerDetails.currentCases
+            .filter((c) => c.caseNumber || c.crimeTitle)
+            .map((c) => ({
+              lawyer_id: lawyerData.id,
+              case_type: "current",
+              police_station: c.policeStation || null,
+              district: c.district || null,
+              case_number: c.caseNumber || null,
+              law_name_and_section: c.lawNameAndSection || null,
+              filing_date: c.filingDate || null,
+              yearly_number: c.yearlyNumber || null,
+              crime_title: c.crimeTitle || null,
+            }))
+
+          // Insert significant cases
+          const significantCaseRecords = lawyerDetails.significantCases
+            .filter((c) => c.caseNumber || c.crimeTitle)
+            .map((c) => ({
+              lawyer_id: lawyerData.id,
+              case_type: "significant",
+              police_station: c.policeStation || null,
+              district: c.district || null,
+              case_number: c.caseNumber || null,
+              law_name_and_section: c.lawNameAndSection || null,
+              filing_date: c.filingDate || null,
+              yearly_number: c.yearlyNumber || null,
+              crime_title: c.crimeTitle || null,
+            }))
+
+          const allCaseRecords = [...currentCaseRecords, ...significantCaseRecords]
+
+          if (allCaseRecords.length > 0) {
+            const { error: insertCasesError } = await supabase
+              .from("lawyer_cases")
+              .insert(allCaseRecords)
+
+            if (insertCasesError) {
+              console.error("Error inserting cases:", insertCasesError)
+            }
+          }
+        }
       }
 
       setIsEditing(false)
       // Show success message (you can add a toast notification here)
     } catch (err) {
-      console.error("Error saving user data:", err)
+      console.error("Error saving profile data:", err)
       setError("Failed to save profile. Please try again.")
     } finally {
       setIsSaving(false)
@@ -492,7 +717,9 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
         const formData = new FormData()
         formData.append('file', croppedFile)
 
-        const response = await fetch('/api/profile/avatar', {
+        // Use different endpoint for lawyers
+        const apiEndpoint = variant === 'lawyer' ? '/api/profile/lawyer-avatar' : '/api/profile/avatar'
+        const response = await fetch(apiEndpoint, {
           method: 'POST',
           body: formData,
         })
@@ -508,6 +735,8 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
         setIsCropDialogOpen(false)
         setSelectedImage(null)
         setImageFile(null)
+        setZoom(1)
+        setPosition({ x: 0, y: 0 })
       }, imageFile.type, 0.9)
     } catch (err) {
       console.error('Error uploading avatar:', err)
@@ -758,20 +987,20 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                    onChange={handleAvatarChange}
-                    className="hidden"
-                    disabled={isUploadingAvatar || variant !== "user"}
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleChangePhotoClick}
-                    disabled={isUploadingAvatar || variant !== "user"}
-                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                      disabled={isUploadingAvatar}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleChangePhotoClick}
+                      disabled={isUploadingAvatar}
+                    >
                     {isUploadingAvatar ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -928,6 +1157,20 @@ export function ProfileSection({ variant = "user" }: ProfileSectionProps) {
                       />
                     </div>
                   </div>
+                  {variant === "lawyer" && user.lawyerId && (
+                    <div className="space-y-2">
+                      <Label htmlFor="lawyer-id">Lawyer ID</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="lawyer-id"
+                          value={user.lawyerId}
+                          disabled={true}
+                          className="pl-10 bg-muted"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
                     <div className="relative">

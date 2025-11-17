@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { LawyerDashboardLayout } from "@/components/lawyer-dashboard-layout"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,134 +56,15 @@ interface AvailableCase {
   status: "active" | "closed" | "pending"
   createdDate: string
   postedBy: string
+  userId?: number
 }
 
-const mockAvailableCases: AvailableCase[] = [
-  {
-    id: "avail-1",
-    caseNumber: "2024-025",
-    caseType: "Civil",
-    thanaName: "Dhanmondi Thana",
-    caseName: "Land Dispute",
-    dharaNumber: "5",
-    caseTitle: "Property boundary and ownership dispute",
-    registerDate: "2024-02-10",
-    description: "Dispute over property boundary lines between two adjacent properties. Seeking legal assistance to resolve ownership claims and establish clear boundaries based on survey documents.",
-    bpFormNo: "BP-2024-025",
-    casePersons: "Rashid Ahmed vs Akbar Ali",
-    relationship: "Property Owner",
-    documents: ["deed.pdf", "survey_report.pdf", "property_tax.pdf"],
-    views: 24,
-    interestedLawyers: 3,
-    status: "active",
-    createdDate: "2024-02-15",
-    postedBy: "Rashid Ahmed",
-  },
-  {
-    id: "avail-2",
-    caseNumber: "2024-026",
-    caseType: "Criminal",
-    thanaName: "Gulshan Thana",
-    caseName: "Fraud Case",
-    dharaNumber: "420",
-    caseTitle: "Financial fraud and embezzlement",
-    registerDate: "2024-02-12",
-    description: "Financial fraud case involving unauthorized transactions. Need experienced criminal lawyer to handle FIR and pursue legal action against the accused party.",
-    bpFormNo: "BP-2024-026",
-    casePersons: "State vs Shahid Hossain",
-    relationship: "Victim",
-    documents: ["fir.pdf", "bank_statements.pdf", "transaction_records.pdf"],
-    views: 18,
-    interestedLawyers: 5,
-    status: "active",
-    createdDate: "2024-02-16",
-    postedBy: "Anamul Haque",
-  },
-  {
-    id: "avail-3",
-    caseNumber: "2024-027",
-    caseType: "Family",
-    thanaName: "Wari Thana",
-    caseName: "Maintenance Case",
-    dharaNumber: "125",
-    caseTitle: "Child and spouse maintenance claim",
-    registerDate: "2024-02-08",
-    description: "Seeking maintenance for child and spouse. Divorce finalized, now need legal representation to claim monthly maintenance as per court order.",
-    bpFormNo: "BP-2024-027",
-    casePersons: "Nusrat Jahan vs Rana Islam",
-    relationship: "Claimant",
-    documents: ["divorce_decree.pdf", "income_proof.pdf"],
-    views: 31,
-    interestedLawyers: 2,
-    status: "active",
-    createdDate: "2024-02-14",
-    postedBy: "Nusrat Jahan",
-  },
-  {
-    id: "avail-4",
-    caseNumber: "2024-028",
-    caseType: "Civil",
-    thanaName: "Uttara Thana",
-    caseName: "Contract Breach",
-    dharaNumber: "10",
-    caseTitle: "Breach of commercial contract",
-    registerDate: "2024-02-14",
-    description: "Contract breach case where supplier failed to deliver goods as per agreement. Seeking damages and contract enforcement. Contract value: ৳5,00,000",
-    bpFormNo: "BP-2024-028",
-    casePersons: "ABC Trading vs XYZ Suppliers",
-    relationship: "Contract Party",
-    documents: ["contract.pdf", "payment_evidence.pdf", "correspondence.pdf"],
-    views: 15,
-    interestedLawyers: 4,
-    status: "active",
-    createdDate: "2024-02-18",
-    postedBy: "Kamrul Hasan",
-  },
-  {
-    id: "avail-5",
-    caseNumber: "2024-029",
-    caseType: "Criminal",
-    thanaName: "Mirpur Thana",
-    caseName: "Defamation Case",
-    dharaNumber: "499",
-    caseTitle: "Criminal defamation and character assassination",
-    registerDate: "2024-02-11",
-    description: "False statements published causing damage to reputation. Need legal action under defamation laws. Evidence includes social media posts and public statements.",
-    bpFormNo: "BP-2024-029",
-    casePersons: "State vs Salma Begum",
-    relationship: "Victim",
-    documents: ["screenshots.pdf", "witness_list.pdf", "complaint_letter.pdf"],
-    views: 22,
-    interestedLawyers: 6,
-    status: "active",
-    createdDate: "2024-02-17",
-    postedBy: "Fatema Khatun",
-  },
-  {
-    id: "avail-6",
-    caseNumber: "2024-030",
-    caseType: "Family",
-    thanaName: "Banani Thana",
-    caseName: "Inheritance Dispute",
-    dharaNumber: "8",
-    caseTitle: "Property inheritance and succession",
-    registerDate: "2024-02-09",
-    description: "Dispute over inheritance property distribution. Multiple heirs claiming rights. Need legal assistance to settle inheritance claims and ensure fair distribution.",
-    bpFormNo: "BP-2024-030",
-    casePersons: "Ahmed vs Others",
-    relationship: "Heir",
-    documents: ["death_certificate.pdf", "will_document.pdf", "property_papers.pdf"],
-    views: 28,
-    interestedLawyers: 7,
-    status: "active",
-    createdDate: "2024-02-19",
-    postedBy: "Ahmed Karim",
-  },
-]
 
 export default function FindCasesPage() {
-  const [cases] = useState<AvailableCase[]>(mockAvailableCases)
-  const [lawyerTokens, setLawyerTokens] = useState(25)
+  const [cases, setCases] = useState<AvailableCase[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lawyerTokens, setLawyerTokens] = useState(0)
   const [searchQuery, setSearchQuery] = useState("")
   const [caseTypeFilter, setCaseTypeFilter] = useState<string>("all")
   const [thanaFilter, setThanaFilter] = useState<string>("all")
@@ -190,6 +73,117 @@ export default function FindCasesPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
   const [caseToAccept, setCaseToAccept] = useState<string | null>(null)
+
+  // Fetch public cases from database
+  useEffect(() => {
+    const fetchPublicCases = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const supabase = createSupabaseBrowserClient()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session?.user) {
+          setError("Please log in to view cases")
+          setIsLoading(false)
+          return
+        }
+
+        // Get lawyer_id to fetch token balance
+        const { data: lawyerData, error: lawyerError } = await supabase
+          .from("lawyers")
+          .select("id, token_balance")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (lawyerError || !lawyerData) {
+          console.error("Error fetching lawyer data:", lawyerError)
+        } else {
+          setLawyerTokens(lawyerData.token_balance || 0)
+        }
+
+        // Fetch all public cases with user information and documents
+        const { data: casesData, error: casesError } = await supabase
+          .from("cases")
+          .select(`
+            *,
+            users (
+              id,
+              username,
+              full_name,
+              email
+            ),
+            case_documents (
+              id,
+              document_path
+            ),
+            case_lawyer_interests (
+              id
+            )
+          `)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+
+        if (casesError) {
+          console.error("Error fetching cases:", casesError)
+          setError("Failed to load cases")
+          setIsLoading(false)
+          return
+        }
+
+        if (casesData) {
+          // Transform database cases to match AvailableCase interface
+          const transformedCases: AvailableCase[] = casesData.map((c: any) => {
+            // Extract document names from paths
+            const documentNames = (c.case_documents || []).map((doc: any) => {
+              const pathParts = doc.document_path.split('/')
+              const fileName = pathParts[pathParts.length - 1]
+              return fileName.replace(/^\d+-/, '') // Remove timestamp prefix
+            })
+
+            // Get user name for postedBy
+            const userName = c.users?.full_name || c.users?.username || "Unknown User"
+
+            // Count interested lawyers
+            const interestedCount = c.case_lawyer_interests?.length || 0
+
+            return {
+              id: String(c.id),
+              caseNumber: c.case_number || "",
+              caseType: c.case_type || "",
+              thanaName: c.thana_name || "",
+              caseName: c.case_name_dhara || "",
+              dharaNumber: c.dhara_number || "",
+              caseTitle: c.case_title || "",
+              registerDate: c.register_date || "",
+              description: c.short_description || "",
+              bpFormNo: c.bp_form_no || "",
+              casePersons: c.case_persons || "",
+              relationship: c.relationship || "",
+              documents: documentNames,
+              views: 0, // TODO: Calculate from case_views table if needed
+              interestedLawyers: interestedCount,
+              status: "active" as const,
+              createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
+              postedBy: userName,
+              userId: c.user_id,
+            }
+          })
+
+          setCases(transformedCases)
+        }
+      } catch (err) {
+        console.error("Error fetching public cases:", err)
+        setError("Failed to load cases")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchPublicCases()
+  }, [])
 
   const TOKEN_COST_PER_CASE = 5
 
@@ -260,6 +254,27 @@ export default function FindCasesPage() {
   return (
     <LawyerDashboardLayout>
       <div className="space-y-4 md:space-y-6">
+        {/* Loading State */}
+        {isLoading && (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Loader2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-spin" />
+              <p className="text-muted-foreground">Loading cases...</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error State */}
+        {!isLoading && error && cases.length === 0 && (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <p className="text-destructive">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isLoading && !error && (
+          <>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex-1">
@@ -271,69 +286,6 @@ export default function FindCasesPage() {
               Browse and accept cases posted by users
             </p>
           </div>
-          {/* Token Display */}
-          <Card className="shrink-0">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <Coins className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Available Tokens</p>
-                  <p className="text-xl sm:text-2xl font-bold">{lawyerTokens}</p>
-                </div>
-                <Badge className="ml-2 bg-accent/10 text-accent">
-                  {TOKEN_COST_PER_CASE} per case
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <Card>
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Total Cases</p>
-                  <p className="text-xl sm:text-2xl font-bold">{stats.total}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Available Now</p>
-                  <p className="text-xl sm:text-2xl font-bold">{stats.available}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">High Interest</p>
-                  <p className="text-xl sm:text-2xl font-bold">{stats.highInterest}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
-                <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Last 7 Days</p>
-                  <p className="text-xl sm:text-2xl font-bold">{stats.recent}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Filters and Search */}
@@ -669,6 +621,8 @@ export default function FindCasesPage() {
             </div>
           </DialogContent>
         </Dialog>
+          </>
+        )}
       </div>
     </LawyerDashboardLayout>
   )

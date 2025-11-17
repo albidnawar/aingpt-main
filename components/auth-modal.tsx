@@ -37,6 +37,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   })
 
   const [lawyerSignupData, setLawyerSignupData] = useState({
+    fullName: "",
     lawyerId: "",
     type: "",
     cellPhone: "",
@@ -163,6 +164,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          fullName: lawyerSignupData.fullName,
           lawyerId: lawyerSignupData.lawyerId,
           type: lawyerSignupData.type,
           cellPhone: lawyerSignupData.cellPhone,
@@ -418,6 +420,16 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
               ) : (
                 <form onSubmit={handleLawyerSignup} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="lawyer-name">Full Name</Label>
+                      <Input
+                        id="lawyer-name"
+                        placeholder="Enter your full name"
+                        value={lawyerSignupData.fullName}
+                        onChange={(e) => setLawyerSignupData({ ...lawyerSignupData, fullName: e.target.value })}
+                        required
+                      />
+                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="lawyer-id">Lawyer ID</Label>
                       <Input

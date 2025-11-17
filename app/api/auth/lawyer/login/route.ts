@@ -51,6 +51,36 @@ export async function POST(req: Request) {
     )
   }
 
+  // Get lawyer_id from lawyers table
+  const { data: lawyerData, error: lawyerError } = await adminSupabase
+    .from('lawyers')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+
+  if (lawyerError || !lawyerData) {
+    console.error('Error fetching lawyer data:', lawyerError)
+    // Still return success, but log the error
+  } else {
+    // Create a session record
+    const headers = req.headers
+    const ipAddress = headers.get('x-forwarded-for') || headers.get('x-real-ip') || 'unknown'
+    const userAgent = headers.get('user-agent') || 'unknown'
+
+    const { error: sessionError } = await adminSupabase
+      .from('lawyer_sessions')
+      .insert({
+        lawyer_id: lawyerData.id,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      })
+
+    if (sessionError) {
+      console.error('Error creating lawyer session:', sessionError)
+      // Don't fail the login, just log the error
+    }
+  }
+
   return NextResponse.json({ user }, { status: 200 })
 }
 

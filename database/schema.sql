@@ -11,6 +11,7 @@ CREATE TABLE users (
 CREATE TABLE lawyers (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   lawyer_id TEXT NOT NULL UNIQUE,
+  full_name TEXT,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   phone TEXT,
@@ -21,6 +22,7 @@ CREATE TABLE lawyers (
   consultation_fee NUMERIC(10,2),
   token_balance INT DEFAULT 0,
   auth_user_id UUID UNIQUE,
+  avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -166,5 +168,15 @@ CREATE TABLE lawyer_rating_entries (
   comment TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE (lawyer_id, user_id)
+);
+
+CREATE TABLE lawyer_sessions (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  lawyer_id BIGINT NOT NULL REFERENCES lawyers (id) ON DELETE CASCADE,
+  session_start TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  session_end TIMESTAMP WITH TIME ZONE,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

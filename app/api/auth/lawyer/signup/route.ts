@@ -6,6 +6,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export async function POST(req: Request) {
   const {
+    fullName,
     lawyerId,
     type,
     cellPhone,
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
 
   const { error: insertError } = await adminSupabase.from('lawyers').insert({
     lawyer_id: lawyerId,
+    full_name: fullName || null,
     email,
     password_hash: passwordHash,
     phone: cellPhone,
