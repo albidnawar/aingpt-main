@@ -21,6 +21,72 @@ import {
 import { FileText, Plus, Eye, Trash2, Download, Users, Upload, X, Loader2, Lock, Globe } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 
+type CaseStatus =
+  | "accepted"
+  | "in_progress"
+  | "hold"
+  | "completed"
+  | "active"
+  | "pending"
+  | "closed"
+
+const normalizeCaseStatus = (value?: string | null): CaseStatus => {
+  if (!value) return "pending"
+  const normalized = value.toLowerCase()
+  if (normalized === "in-progress") return "in_progress"
+  if (normalized === "on_hold") return "hold"
+  const allowed: CaseStatus[] = [
+    "accepted",
+    "in_progress",
+    "hold",
+    "completed",
+    "active",
+    "pending",
+    "closed",
+  ]
+  return (allowed.find((status) => status === normalized) ?? "pending") as CaseStatus
+}
+
+const getStatusLabel = (status: CaseStatus) => {
+  switch (status) {
+    case "accepted":
+      return "Accepted"
+    case "in_progress":
+      return "In Progress"
+    case "hold":
+      return "On Hold"
+    case "completed":
+      return "Completed"
+    case "active":
+      return "Active"
+    case "closed":
+      return "Closed"
+    case "pending":
+    default:
+      return "Pending"
+  }
+}
+
+const getStatusBadgeVariant = (status: CaseStatus) => {
+  switch (status) {
+    case "accepted":
+      return { variant: "default" as const, className: "bg-blue-100 text-blue-800" }
+    case "in_progress":
+      return { variant: "secondary" as const, className: "bg-yellow-100 text-yellow-800" }
+    case "hold":
+      return { variant: "secondary" as const, className: "bg-gray-100 text-gray-800" }
+    case "completed":
+      return { variant: "outline" as const, className: "bg-green-100 text-green-800" }
+    case "active":
+      return { variant: "default" as const, className: "bg-green-100 text-green-800" }
+    case "closed":
+      return { variant: "outline" as const, className: "bg-muted text-muted-foreground" }
+    case "pending":
+    default:
+      return { variant: "secondary" as const, className: "" }
+  }
+}
+
 interface CaseFile {
   id: string
   caseNumber: string
@@ -36,7 +102,7 @@ interface CaseFile {
   relationship: string
   documents: string[] | any[]
   interested: boolean
-  status: "active" | "closed" | "pending"
+  status: CaseStatus
   createdDate: string
   filesData?: any[] // Full file metadata from database
   isPublic?: boolean // Public/private status
@@ -181,7 +247,7 @@ export default function MyCasesPage() {
               documents: documentNames,
               filesData: documentPaths, // Store full paths for download
               interested: false, // TODO: Check from case_lawyer_interests table
-              status: "active" as const, // TODO: Add status field to database
+              status: normalizeCaseStatus(c.status),
               createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
               isPublic: c.is_public ?? false,
             }
@@ -286,7 +352,7 @@ export default function MyCasesPage() {
         documents: documentNames,
         filesData: filesData, // Store full paths for download
         interested: false,
-        status: "active",
+        status: normalizeCaseStatus(data.case.status ?? "pending"),
         createdDate: data.case.created_at ? new Date(data.case.created_at).toISOString().split("T")[0] : "",
         isPublic: data.case.is_public ?? false,
       }
@@ -689,7 +755,13 @@ export default function MyCasesPage() {
                 <Badge className="bg-green-100 text-green-800">Active</Badge>
                 <div>
                   <p className="text-sm text-muted-foreground">Active Cases</p>
-                  <p className="text-2xl font-bold">{cases.filter((c) => c.status === "active").length}</p>
+                  <p className="text-2xl font-bold">
+                    {
+                      cases.filter((c) =>
+                        ["accepted", "in_progress", "active"].includes(c.status),
+                      ).length
+                    }
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -725,18 +797,14 @@ export default function MyCasesPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-semibold text-lg">{caseFile.caseTitle}</h3>
-                      <Badge
-                        variant={
-                          caseFile.status === "active"
-                            ? "default"
-                            : caseFile.status === "pending"
-                              ? "secondary"
-                              : "outline"
-                        }
-                        className={caseFile.status === "active" ? "bg-green-100 text-green-800" : ""}
-                      >
-                        {caseFile.status}
-                      </Badge>
+                      {(() => {
+                        const badge = getStatusBadgeVariant(caseFile.status)
+                        return (
+                          <Badge variant={badge.variant} className={badge.className}>
+                            {getStatusLabel(caseFile.status)}
+                          </Badge>
+                        )
+                      })()}
                     </div>
                     <p className="text-sm text-muted-foreground">Case #: {caseFile.caseNumber}</p>
                   </div>
@@ -837,18 +905,14 @@ export default function MyCasesPage() {
                     <h3 className="text-xl font-semibold mb-1">{selectedCase.caseTitle || "Untitled Case"}</h3>
                     <p className="text-sm text-muted-foreground">Case #: {selectedCase.caseNumber}</p>
                   </div>
-                  <Badge
-                    variant={
-                      selectedCase.status === "active"
-                        ? "default"
-                        : selectedCase.status === "pending"
-                          ? "secondary"
-                          : "outline"
-                    }
-                    className={selectedCase.status === "active" ? "bg-green-100 text-green-800" : ""}
-                  >
-                    {selectedCase.status}
-                  </Badge>
+                  {(() => {
+                    const badge = getStatusBadgeVariant(selectedCase.status)
+                    return (
+                      <Badge variant={badge.variant} className={badge.className}>
+                        {getStatusLabel(selectedCase.status)}
+                      </Badge>
+                    )
+                  })()}
                 </div>
 
                 {/* Case Information Grid */}

@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { NextResponse } from "next/server"
+import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 
 export async function GET(
   req: Request,
@@ -10,68 +10,106 @@ export async function GET(
     const supabase = createServerSupabaseClient()
     const adminSupabase = createAdminSupabaseClient()
 
-    // Get current user session
     const {
       data: { session },
       error: sessionError,
     } = await supabase.auth.getSession()
 
     if (sessionError || !session?.user) {
-      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 })
     }
 
-    // Get user_id from users table
-    const { data: userData, error: userError } = await adminSupabase
-      .from('users')
-      .select('id')
-      .eq('auth_user_id', session.user.id)
-      .maybeSingle()
+    const caseIdParam = params.caseId
+    const caseIdNum = parseInt(caseIdParam, 10)
 
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'User not found.' }, { status: 404 })
+    if (Number.isNaN(caseIdNum)) {
+      return NextResponse.json({ error: "Invalid case ID." }, { status: 400 })
     }
 
-    const caseId = params.caseId
     const { searchParams } = new URL(req.url)
-    const fileName = searchParams.get('fileName')
+    const fileName = searchParams.get("fileName")
+    const filePathQuery = searchParams.get("filePath")
 
-    if (!fileName) {
-      return NextResponse.json({ error: 'File name is required.' }, { status: 400 })
+    if (!fileName && !filePathQuery) {
+      return NextResponse.json({ error: "File identifier is required." }, { status: 400 })
     }
 
-    // Get case to verify ownership
+    const [userResult, lawyerResult] = await Promise.all([
+      adminSupabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle(),
+      adminSupabase
+        .from("lawyers")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle(),
+    ])
+
+    const userId = userResult.data?.id ?? null
+    const lawyerId = lawyerResult.data?.id ?? null
+
+    if (!userId && !lawyerId) {
+      return NextResponse.json({ error: "Account not found." }, { status: 404 })
+    }
+
     const { data: caseData, error: caseError } = await adminSupabase
-      .from('cases')
-      .select('id, user_id')
-      .eq('id', caseId)
+      .from("cases")
+      .select("id, user_id")
+      .eq("id", caseIdNum)
       .maybeSingle()
 
     if (caseError || !caseData) {
-      return NextResponse.json({ error: 'Case not found.' }, { status: 404 })
+      return NextResponse.json({ error: "Case not found." }, { status: 404 })
     }
 
-    // Verify user owns this case
-    if (caseData.user_id !== userData.id) {
-      return NextResponse.json({ error: 'Unauthorized access to this case.' }, { status: 403 })
+    let hasAccess = false
+
+    if (userId && caseData.user_id === userId) {
+      hasAccess = true
     }
 
-    // Get all documents for this case
+    if (!hasAccess && lawyerId) {
+      const { data: acceptanceData, error: acceptanceError } = await adminSupabase
+        .from("case_acceptances")
+        .select("id")
+        .eq("case_id", caseIdNum)
+        .eq("lawyer_id", lawyerId)
+        .maybeSingle()
+
+      if (acceptanceError) {
+        console.error("Error verifying acceptance for download:", acceptanceError)
+        return NextResponse.json({ error: "Unable to verify access." }, { status: 500 })
+      }
+
+      if (acceptanceData) {
+        hasAccess = true
+      }
+    }
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Unauthorized access to this case." }, { status: 403 })
+    }
+
     const { data: documentsData, error: documentError } = await adminSupabase
-      .from('case_documents')
-      .select('document_path')
-      .eq('case_id', caseId)
+      .from("case_documents")
+      .select("document_path")
+      .eq("case_id", caseIdNum)
 
     if (documentError || !documentsData || documentsData.length === 0) {
-      return NextResponse.json({ error: 'No files found for this case.' }, { status: 404 })
+      return NextResponse.json({ error: "No files found for this case." }, { status: 404 })
     }
 
-    // Find the document that matches the fileName (could be full path or just filename)
     const documentData = documentsData.find((doc) => {
-      const pathParts = doc.document_path.split('/')
+      if (filePathQuery) {
+        return doc.document_path === filePathQuery
+      }
+
+      const pathParts = doc.document_path.split("/")
       const pathFileName = pathParts[pathParts.length - 1]
-      const cleanPathFileName = pathFileName.replace(/^\d+-/, '') // Remove timestamp prefix
-      
-      // Match by full path, filename with timestamp, or clean filename
+      const cleanPathFileName = pathFileName.replace(/^\d+-/, "")
+
       return (
         doc.document_path === fileName ||
         pathFileName === fileName ||
@@ -80,13 +118,12 @@ export async function GET(
     })
 
     if (!documentData) {
-      return NextResponse.json({ error: 'File not found for this case.' }, { status: 404 })
+      return NextResponse.json({ error: "File not found for this case." }, { status: 404 })
     }
 
     const filePath = documentData.document_path
-    const bucketName = 'case-documents'
+    const bucketName = "case-documents"
 
-    // Download file from Supabase Storage
     const { data: fileBlob, error: downloadError } = await adminSupabase.storage
       .from(bucketName)
       .download(filePath)
@@ -94,28 +131,26 @@ export async function GET(
     if (downloadError || !fileBlob) {
       return NextResponse.json(
         {
-          error: 'File not available in storage.',
-          message: downloadError?.message || 'File download failed',
+          error: "File not available in storage.",
+          message: downloadError?.message || "File download failed",
         },
         { status: 404 },
       )
     }
 
-    // Extract filename from path for download
-    const pathParts = filePath.split('/')
-    const originalFileName = pathParts[pathParts.length - 1].replace(/^\d+-/, '') // Remove timestamp prefix
+    const pathParts = filePath.split("/")
+    const originalFileName = pathParts[pathParts.length - 1].replace(/^\d+-/, "")
 
-    // Return the file blob
     const arrayBuffer = await fileBlob.arrayBuffer()
     return new NextResponse(arrayBuffer, {
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${originalFileName}"`,
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${originalFileName}"`,
       },
     })
   } catch (error) {
-    console.error('Error downloading file:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error("Error downloading file:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 

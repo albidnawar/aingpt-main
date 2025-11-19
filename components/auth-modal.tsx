@@ -9,9 +9,32 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { X, Loader2 } from "lucide-react"
+
+const PRACTICE_AREA_OPTIONS = [
+  "Civil & Land Litigation (দেওয়ানী / জমি)",
+  "Criminal Defense (ফৌজদারী মামলা)",
+  "Corporate & Commercial Law",
+  "Contract & Procurement",
+  "Family & Personal Laws (পারিবারিক)",
+  "Human Rights & Constitutional Matters",
+  "Banking, Finance & Microcredit",
+  "Taxation, VAT & Customs",
+  "Intellectual Property & Media",
+  "Labour & Employment (শ্রম আইন)",
+  "Immigration & Citizenship",
+  "Admiralty, Shipping & Maritime",
+  "Arbitration, Mediation & ADR",
+  "Technology, Cyber Crime & Data",
+  "Energy, Power & Infrastructure",
+  "Environment & Climate Justice",
+  "Telecom & ICT Regulation",
+  "Consumer Rights & Competition",
+  "Real Estate & Construction",
+  "Public Interest & NGO Governance",
+]
 
 interface AuthModalProps {
   isOpen: boolean
@@ -39,7 +62,8 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
   const [lawyerSignupData, setLawyerSignupData] = useState({
     fullName: "",
     lawyerId: "",
-    type: "",
+    practiceAreas: [] as string[],
+    customPracticeArea: "",
     cellPhone: "",
     email: "",
     chamberAddress: "",
@@ -53,6 +77,48 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
 
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const togglePracticeArea = (area: string, isChecked: boolean) => {
+    setLawyerSignupData((prev) => {
+      const alreadySelected = prev.practiceAreas.includes(area)
+      let updated = prev.practiceAreas
+
+      if (isChecked && !alreadySelected) {
+        updated = [...prev.practiceAreas, area]
+      } else if (!isChecked && alreadySelected) {
+        updated = prev.practiceAreas.filter((item) => item !== area)
+      }
+
+      return { ...prev, practiceAreas: updated }
+    })
+  }
+
+  const removePracticeArea = (area: string) => {
+    togglePracticeArea(area, false)
+  }
+
+  const addCustomPracticeArea = () => {
+    const trimmed = lawyerSignupData.customPracticeArea.trim()
+    if (!trimmed) return
+
+    setLawyerSignupData((prev) => {
+      if (prev.practiceAreas.includes(trimmed)) {
+        return { ...prev, customPracticeArea: "" }
+      }
+      return {
+        ...prev,
+        customPracticeArea: "",
+        practiceAreas: [...prev.practiceAreas, trimmed],
+      }
+    })
+  }
+
+  const handleCustomPracticeAreaKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      addCustomPracticeArea()
+    }
+  }
 
   const handleUserLogin = async () => {
     setIsSubmitting(true)
@@ -152,8 +218,8 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
       setError("Please agree to the Terms & Conditions.")
       return
     }
-    if (!lawyerSignupData.type) {
-      setError("Please select a lawyer type.")
+    if (lawyerSignupData.practiceAreas.length === 0) {
+      setError("Please select at least one practice area.")
       return
     }
 
@@ -166,7 +232,7 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
         body: JSON.stringify({
           fullName: lawyerSignupData.fullName,
           lawyerId: lawyerSignupData.lawyerId,
-          type: lawyerSignupData.type,
+          practiceAreas: lawyerSignupData.practiceAreas,
           cellPhone: lawyerSignupData.cellPhone,
           email: lawyerSignupData.email,
           chamberAddress: lawyerSignupData.chamberAddress,
@@ -440,21 +506,72 @@ export function AuthModal({ isOpen, onClose, onLogin }: AuthModalProps) {
                         required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lawyer-type">Type (Civil/Criminal)</Label>
-                      <Select
-                        value={lawyerSignupData.type}
-                        onValueChange={(value) => setLawyerSignupData({ ...lawyerSignupData, type: value })}
-                      >
-                        <SelectTrigger id="lawyer-type">
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Civil">Civil</SelectItem>
-                          <SelectItem value="Criminal">Criminal</SelectItem>
-                          <SelectItem value="Both">Both</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="practice-areas">Practice Areas (select all that apply)</Label>
+                      <div className="rounded-lg border border-dashed border-border/70 p-3">
+                        <div className="max-h-64 overflow-y-auto pr-1">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {PRACTICE_AREA_OPTIONS.map((area) => (
+                              <label
+                                key={area}
+                                className="flex items-start gap-2 rounded-md border border-border/70 p-3 text-sm hover:bg-muted/50"
+                              >
+                                <Checkbox
+                                  checked={lawyerSignupData.practiceAreas.includes(area)}
+                                  onCheckedChange={(checked) => togglePracticeArea(area, checked === true)}
+                                />
+                                <span className="leading-snug">{area}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-col gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            {lawyerSignupData.practiceAreas.length === 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Select at least one practice area to help us route cases correctly.
+                              </p>
+                            )}
+                            {lawyerSignupData.practiceAreas.map((area) => (
+                              <Badge key={area} variant="secondary" className="flex items-center gap-1">
+                                {area}
+                                <button
+                                  type="button"
+                                  className="rounded-full p-0.5 hover:bg-secondary-foreground/10"
+                                  aria-label={`Remove ${area}`}
+                                  onClick={() => removePracticeArea(area)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input
+                              id="practice-areas"
+                              placeholder="Add another practice area"
+                              value={lawyerSignupData.customPracticeArea}
+                              onChange={(e) =>
+                                setLawyerSignupData({ ...lawyerSignupData, customPracticeArea: e.target.value })
+                              }
+                              onKeyDown={handleCustomPracticeAreaKeyDown}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="sm:w-32"
+                              onClick={addCustomPracticeArea}
+                              disabled={!lawyerSignupData.customPracticeArea.trim()}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        These help us match you with the right cases in Bangladesh. You can add custom areas too.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lawyer-cell-phone">Cell Phone</Label>

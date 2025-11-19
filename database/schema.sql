@@ -15,7 +15,7 @@ CREATE TABLE lawyers (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   phone TEXT,
-  type TEXT,
+  practice_areas TEXT[],
   chamber_address TEXT,
   law_practicing_place TEXT,
   years_experience INT,

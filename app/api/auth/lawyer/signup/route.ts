@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const {
     fullName,
     lawyerId,
-    type,
+    practiceAreas,
     cellPhone,
     email,
     chamberAddress,
@@ -18,7 +18,14 @@ export async function POST(req: Request) {
     password,
   } = await req.json()
 
-  if (!lawyerId || !email || !password || !type || !chamberAddress) {
+  const normalizedPracticeAreas = Array.isArray(practiceAreas)
+    ? practiceAreas
+        .filter((area: unknown): area is string => typeof area === 'string')
+        .map((area) => area.trim())
+        .filter(Boolean)
+    : []
+
+  if (!lawyerId || !email || !password || normalizedPracticeAreas.length === 0 || !chamberAddress) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 })
   }
 
@@ -45,7 +52,7 @@ export async function POST(req: Request) {
       role: 'lawyer',
       lawyer_id: lawyerId,
       phone: cellPhone,
-      type,
+      practice_areas: normalizedPracticeAreas,
     },
   })
 
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
     email,
     password_hash: passwordHash,
     phone: cellPhone,
-    type,
+    practice_areas: normalizedPracticeAreas,
     chamber_address: chamberAddress,
     law_practicing_place: lawPracticingPlace,
     years_experience: yearsExperienceValue,

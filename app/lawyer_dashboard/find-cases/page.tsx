@@ -37,6 +37,14 @@ import {
   SortAsc,
 } from "lucide-react"
 
+type CaseStatus = "accepted" | "in_progress" | "hold" | "completed" | null
+
+interface CaseDocument {
+  id: string
+  name: string
+  path?: string
+}
+
 interface AvailableCase {
   id: string
   caseNumber: string
@@ -50,13 +58,14 @@ interface AvailableCase {
   bpFormNo: string
   casePersons: string
   relationship: string
-  documents: string[]
+  documents: CaseDocument[]
   views: number
   interestedLawyers: number
   status: "active" | "closed" | "pending"
   createdDate: string
   postedBy: string
   userId?: number
+  status: CaseStatus
 }
 
 
@@ -73,6 +82,8 @@ export default function FindCasesPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
   const [caseToAccept, setCaseToAccept] = useState<string | null>(null)
+  const [isAccepting, setIsAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
 
   // Fetch public cases from database
   useEffect(() => {
@@ -121,6 +132,10 @@ export default function FindCasesPage() {
             ),
             case_lawyer_interests (
               id
+            ),
+            case_acceptances (
+              id,
+              status
             )
           `)
           .eq("is_public", true)
@@ -134,13 +149,25 @@ export default function FindCasesPage() {
         }
 
         if (casesData) {
-          // Transform database cases to match AvailableCase interface
-          const transformedCases: AvailableCase[] = casesData.map((c: any) => {
-            // Extract document names from paths
-            const documentNames = (c.case_documents || []).map((doc: any) => {
-              const pathParts = doc.document_path.split('/')
-              const fileName = pathParts[pathParts.length - 1]
-              return fileName.replace(/^\d+-/, '') // Remove timestamp prefix
+          const openCases = casesData.filter((c: any) => {
+            const hasTakenStatus =
+              c.status &&
+              ["accepted", "in_progress", "hold", "completed"].includes(c.status.toLowerCase())
+            const hasAcceptedRecord = (c.case_acceptances || []).some(
+              (acceptance: any) => acceptance?.status === "accepted",
+            )
+            return !hasTakenStatus && !hasAcceptedRecord
+          })
+
+          const transformedCases: AvailableCase[] = openCases.map((c: any) => {
+            const documents: CaseDocument[] = (c.case_documents || []).map((doc: any) => {
+              const pathParts = doc.document_path.split("/")
+              const fileName = pathParts[pathParts.length - 1].replace(/^\d+-/, "")
+              return {
+                id: String(doc.id),
+                name: fileName,
+                path: doc.document_path,
+              }
             })
 
             // Get user name for postedBy
@@ -162,13 +189,14 @@ export default function FindCasesPage() {
               bpFormNo: c.bp_form_no || "",
               casePersons: c.case_persons || "",
               relationship: c.relationship || "",
-              documents: documentNames,
+              documents,
               views: 0, // TODO: Calculate from case_views table if needed
               interestedLawyers: interestedCount,
               status: "active" as const,
               createdDate: c.created_at ? new Date(c.created_at).toISOString().split("T")[0] : "",
               postedBy: userName,
               userId: c.user_id,
+                status: c.status ?? null,
             }
           })
 
@@ -188,19 +216,45 @@ export default function FindCasesPage() {
   const TOKEN_COST_PER_CASE = 5
 
   const handleAcceptCase = (caseId: string) => {
-    if (lawyerTokens >= TOKEN_COST_PER_CASE) {
-      setCaseToAccept(caseId)
-      setShowAcceptConfirm(true)
+    if (lawyerTokens < TOKEN_COST_PER_CASE) {
+      setAcceptError("You do not have enough tokens to accept this case.")
+      return
     }
+    setAcceptError(null)
+    setCaseToAccept(caseId)
+    setShowAcceptConfirm(true)
   }
 
-  const confirmAcceptCase = () => {
-    if (caseToAccept && lawyerTokens >= TOKEN_COST_PER_CASE) {
-      setLawyerTokens(lawyerTokens - TOKEN_COST_PER_CASE)
+  const confirmAcceptCase = async () => {
+    if (!caseToAccept || lawyerTokens < TOKEN_COST_PER_CASE) {
+      return
+    }
+
+    try {
+      setIsAccepting(true)
+      setAcceptError(null)
+      const response = await fetch(`/api/lawyer/cases/${caseToAccept}/accept`, {
+        method: "POST",
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to accept case.")
+      }
+
+      setLawyerTokens(
+        typeof data.tokenBalance === "number"
+          ? data.tokenBalance
+          : Math.max(lawyerTokens - TOKEN_COST_PER_CASE, 0),
+      )
+      setCases((prev) => prev.filter((caseItem) => caseItem.id !== caseToAccept))
       setShowAcceptConfirm(false)
       setCaseToAccept(null)
-      // Here you would typically send the acceptance to the backend
-      // and the case would move to "My Cases" > "Pending Requests"
+    } catch (err) {
+      console.error("Error accepting case:", err)
+      setAcceptError(err instanceof Error ? err.message : "Failed to accept case.")
+    } finally {
+      setIsAccepting(false)
     }
   }
 
@@ -555,14 +609,14 @@ export default function FindCasesPage() {
                   <div className="space-y-2">
                     {selectedCase.documents.map((doc, idx) => (
                       <div
-                        key={idx}
+                        key={doc.id || idx}
                         className="flex items-center justify-between p-2 bg-muted rounded-lg gap-2"
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="text-xs sm:text-sm truncate">{doc}</span>
+                          <span className="text-xs sm:text-sm truncate">{doc.name}</span>
                         </div>
-                        <Button size="sm" variant="ghost" className="shrink-0">
+                        <Button size="sm" variant="ghost" className="shrink-0" disabled title="Accept the case to download documents">
                           <Download className="h-4 w-4" />
                         </Button>
                       </div>
@@ -606,6 +660,11 @@ export default function FindCasesPage() {
                 {lawyerTokens} tokens available.
               </DialogDescription>
             </DialogHeader>
+            {acceptError && (
+              <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-2">
+                {acceptError}
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 sm:justify-end mt-4">
               <Button variant="outline" onClick={() => setShowAcceptConfirm(false)}>
                 Cancel
@@ -613,10 +672,10 @@ export default function FindCasesPage() {
               <Button
                 className="bg-accent hover:bg-accent/90"
                 onClick={confirmAcceptCase}
-                disabled={lawyerTokens < TOKEN_COST_PER_CASE}
+                disabled={lawyerTokens < TOKEN_COST_PER_CASE || isAccepting}
               >
                 <Coins className="h-4 w-4 mr-2" />
-                Accept & Pay {TOKEN_COST_PER_CASE} Tokens
+                {isAccepting ? "Processing..." : `Accept & Pay ${TOKEN_COST_PER_CASE} Tokens`}
               </Button>
             </div>
           </DialogContent>

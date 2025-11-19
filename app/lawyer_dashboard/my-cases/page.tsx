@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { LawyerDashboardLayout } from "@/components/lawyer-dashboard-layout"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,11 +14,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { FileText, Eye, Download, MessageCircle, User, Calendar, Phone, Mail, Check, X, Clock } from "lucide-react"
+import {
+  FileText,
+  Eye,
+  Download,
+  MessageCircle,
+  User,
+  Calendar,
+  Phone,
+  Mail,
+  Check,
+  X,
+  Clock,
+  Loader2,
+} from "lucide-react"
 import Link from "next/link"
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
+
+type CaseStatusOption = "accepted" | "in_progress" | "hold" | "completed"
+
+const CASE_STATUS_OPTIONS: CaseStatusOption[] = ["accepted", "in_progress", "hold", "completed"]
+
+const normalizeCaseStatus = (value?: string | null): CaseStatusOption => {
+  if (!value) return "accepted"
+  const normalized = value.toLowerCase()
+  if (normalized === "hold" || normalized === "on_hold") {
+    return "hold"
+  }
+  if (CASE_STATUS_OPTIONS.includes(normalized as CaseStatusOption)) {
+    return normalized as CaseStatusOption
+  }
+  return "accepted"
+}
+
+interface CaseDocument {
+  id: string
+  name: string
+  path?: string
+}
 
 interface PendingCaseRequest {
   id: string
+  caseId?: string
   caseNumber: string
   caseType: string
   thanaName: string
@@ -29,7 +66,7 @@ interface PendingCaseRequest {
   description: string
   bpFormNo: string
   casePersons: string
-  documents: string[]
+  documents: CaseDocument[]
   requestedDate: string
   clientName: string
   clientPhone: string
@@ -39,6 +76,7 @@ interface PendingCaseRequest {
 
 interface AcceptedCase {
   id: string
+  caseId: string
   caseNumber: string
   caseType: string
   thanaName: string
@@ -49,8 +87,8 @@ interface AcceptedCase {
   description: string
   bpFormNo: string
   casePersons: string
-  documents: string[]
-  status: "accepted" | "in_progress" | "completed" | "on_hold"
+  documents: CaseDocument[]
+  status: CaseStatusOption
   acceptedDate: string
   clientName: string
   clientPhone: string
@@ -59,9 +97,16 @@ interface AcceptedCase {
   lastUpdated: string
 }
 
+const createMockDocuments = (caseId: string, files: string[]): CaseDocument[] =>
+  files.map((name, index) => ({
+    id: `${caseId}-doc-${index + 1}`,
+    name,
+  }))
+
 const mockPendingRequests: PendingCaseRequest[] = [
   {
     id: "req-1",
+    caseId: "req-1",
     caseNumber: "2024-050",
     caseType: "Civil",
     thanaName: "Banani Thana",
@@ -72,7 +117,7 @@ const mockPendingRequests: PendingCaseRequest[] = [
     description: "Client failed to make payment as per the contract terms. Seeking legal remedy for breach of contract.",
     bpFormNo: "BP-2024-050",
     casePersons: "ABC Company vs XYZ Traders",
-    documents: ["contract.pdf", "payment_evidence.pdf"],
+    documents: createMockDocuments("req-1", ["contract.pdf", "payment_evidence.pdf"]),
     requestedDate: "2024-02-22",
     clientName: "Karim Uddin",
     clientPhone: "+880 1987-654321",
@@ -81,6 +126,7 @@ const mockPendingRequests: PendingCaseRequest[] = [
   },
   {
     id: "req-2",
+    caseId: "req-2",
     caseNumber: "2024-051",
     caseType: "Criminal",
     thanaName: "Uttara Thana",
@@ -91,7 +137,7 @@ const mockPendingRequests: PendingCaseRequest[] = [
     description: "Theft case involving valuable electronic items from residence. FIR has been filed.",
     bpFormNo: "BP-2024-051",
     casePersons: "State vs Unknown",
-    documents: ["fir.pdf", "police_report.pdf", "evidence_photos.pdf"],
+    documents: createMockDocuments("req-2", ["fir.pdf", "police_report.pdf", "evidence_photos.pdf"]),
     requestedDate: "2024-02-21",
     clientName: "Rashida Khatun",
     clientPhone: "+880 1876-543210",
@@ -100,6 +146,7 @@ const mockPendingRequests: PendingCaseRequest[] = [
   },
   {
     id: "req-3",
+    caseId: "req-3",
     caseNumber: "2024-052",
     caseType: "Family",
     thanaName: "Wari Thana",
@@ -110,7 +157,7 @@ const mockPendingRequests: PendingCaseRequest[] = [
     description: "Seeking custody of minor child. Divorce proceedings completed, now need legal assistance for custody.",
     bpFormNo: "BP-2024-052",
     casePersons: "Ayesha Begum vs Hasan Ahmed",
-    documents: ["divorce_decree.pdf", "child_birth_certificate.pdf"],
+    documents: createMockDocuments("req-3", ["divorce_decree.pdf", "child_birth_certificate.pdf"]),
     requestedDate: "2024-02-22",
     clientName: "Ayesha Begum",
     clientPhone: "+880 1765-432109",
@@ -118,90 +165,227 @@ const mockPendingRequests: PendingCaseRequest[] = [
   },
 ]
 
-const mockAcceptedCases: AcceptedCase[] = [
-  {
-    id: "1",
-    caseNumber: "2024-001",
-    caseType: "Civil",
-    thanaName: "Gulshan Thana",
-    caseName: "Property Dispute",
-    dharaNumber: "5",
-    caseTitle: "Land ownership dispute",
-    registerDate: "2024-01-15",
-    description: "Property boundary dispute with neighbor regarding 500 square feet of land",
-    bpFormNo: "BP-2024-001",
-    casePersons: "Ahmed Rahman vs Fatima Khan",
-    documents: ["deed.pdf", "survey_report.pdf", "ownership_certificate.pdf"],
-    status: "in_progress",
-    acceptedDate: "2024-01-20",
-    clientName: "Ahmed Rahman",
-    clientPhone: "+880 1712-345678",
-    clientEmail: "ahmed.rahman@email.com",
-    consultationFee: "৳2,000",
-    lastUpdated: "2024-02-10",
-  },
-  {
-    id: "2",
-    caseNumber: "2024-002",
-    caseType: "Criminal",
-    thanaName: "Mirpur Thana",
-    caseName: "Assault Case",
-    dharaNumber: "294",
-    caseTitle: "Public assault incident",
-    registerDate: "2024-02-01",
-    description: "Assault case during neighborhood dispute. Victim sustained minor injuries.",
-    bpFormNo: "BP-2024-002",
-    casePersons: "State vs Mohammad Hassan",
-    documents: ["fir.pdf", "medical_report.pdf", "witness_statement.pdf"],
-    status: "accepted",
-    acceptedDate: "2024-02-05",
-    clientName: "Mohammad Hassan",
-    clientPhone: "+880 1945-678901",
-    clientEmail: "m.hassan@email.com",
-    consultationFee: "৳3,500",
-    lastUpdated: "2024-02-08",
-  },
-  {
-    id: "3",
-    caseNumber: "2024-015",
-    caseType: "Family",
-    thanaName: "Dhanmondi Thana",
-    caseName: "Divorce Case",
-    dharaNumber: "13",
-    caseTitle: "Mutual divorce proceedings",
-    registerDate: "2024-01-10",
-    description: "Mutual consent divorce case. Both parties have agreed to terms.",
-    bpFormNo: "BP-2024-015",
-    casePersons: "Fatima Begum vs Karim Uddin",
-    documents: ["marriage_certificate.pdf", "agreement.pdf"],
-    status: "completed",
-    acceptedDate: "2024-01-12",
-    clientName: "Fatima Begum",
-    clientPhone: "+880 1755-123456",
-    clientEmail: "fatima.begum@email.com",
-    consultationFee: "৳5,000",
-    lastUpdated: "2024-02-15",
-  },
-]
-
 export default function LawyerMyCasesPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const [pendingRequests, setPendingRequests] = useState<PendingCaseRequest[]>(mockPendingRequests)
-  const [acceptedCases, setAcceptedCases] = useState<AcceptedCase[]>(mockAcceptedCases)
+  const [acceptedCases, setAcceptedCases] = useState<AcceptedCase[]>([])
+  const [isLoadingAccepted, setIsLoadingAccepted] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [selectedCase, setSelectedCase] = useState<PendingCaseRequest | AcceptedCase | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [activeTab, setActiveTab] = useState<string>("pending")
 
+  const formatISODate = (value?: string | null) => {
+    if (!value) return "N/A"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return "N/A"
+    }
+    return date.toISOString().split("T")[0]
+  }
+
+  const getFileNameFromPath = (path?: string | null) => {
+    if (!path) return "document"
+    const parts = path.split("/")
+    return parts[parts.length - 1].replace(/^\d+-/, "")
+  }
+
+  useEffect(() => {
+    const loadAcceptedCases = async () => {
+      try {
+        setIsLoadingAccepted(true)
+        setFetchError(null)
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError || !session?.user) {
+          setFetchError("Please log in to view accepted cases.")
+          setAcceptedCases([])
+          return
+        }
+
+        const { data: lawyerData, error: lawyerError } = await supabase
+          .from("lawyers")
+          .select("id")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle()
+
+        if (lawyerError || !lawyerData) {
+          setFetchError("Lawyer profile not found.")
+          setAcceptedCases([])
+          return
+        }
+
+        const { data, error } = await supabase
+          .from("case_acceptances")
+          .select(
+            `
+            id,
+            status,
+            accepted_at,
+            case_id,
+            cases (
+              id,
+              case_number,
+              case_type,
+              thana_name,
+              case_name_dhara,
+              dhara_number,
+              case_title,
+              register_date,
+              bp_form_no,
+              case_persons,
+              relationship,
+              short_description,
+              created_at,
+              users (
+                id,
+                full_name,
+                username,
+                email,
+                phone
+              ),
+              case_documents (
+                id,
+                document_path
+              )
+            )
+          `,
+          )
+          .eq("lawyer_id", lawyerData.id)
+          .order("accepted_at", { ascending: false })
+
+        if (error) {
+          console.error("Error fetching accepted cases:", error)
+          setFetchError("Failed to load accepted cases.")
+          setAcceptedCases([])
+          return
+        }
+
+        const transformedCases: AcceptedCase[] = (data || [])
+          .map((record: any) => {
+            if (!record.cases) {
+              return null
+            }
+            const caseInfo = record.cases
+            const documents: CaseDocument[] = (caseInfo.case_documents || []).map(
+              (doc: any, index: number) => ({
+                id: doc.id ? String(doc.id) : `${caseInfo.id}-doc-${index + 1}`,
+                name: getFileNameFromPath(doc.document_path),
+                path: doc.document_path,
+              }),
+            )
+            const client = caseInfo.users
+            const caseStatus = normalizeCaseStatus(caseInfo.status || record.status)
+            return {
+              id: String(record.id),
+              caseId: String(caseInfo.id),
+              caseNumber: caseInfo.case_number || "",
+              caseType: caseInfo.case_type || "",
+              thanaName: caseInfo.thana_name || "",
+              caseName: caseInfo.case_name_dhara || "",
+              dharaNumber: caseInfo.dhara_number || "",
+              caseTitle: caseInfo.case_title || "",
+              registerDate: caseInfo.register_date ? formatISODate(caseInfo.register_date) : "N/A",
+              description: caseInfo.short_description || "",
+              bpFormNo: caseInfo.bp_form_no || "",
+              casePersons: caseInfo.case_persons || "",
+              documents,
+              status: caseStatus,
+              acceptedDate: record.accepted_at ? formatISODate(record.accepted_at) : "N/A",
+              clientName: client?.full_name || client?.username || "Client",
+              clientPhone: client?.phone || "Not provided",
+              clientEmail: client?.email || "Not provided",
+              consultationFee: "৳0",
+              lastUpdated: formatISODate(caseInfo.created_at || record.accepted_at),
+            }
+          })
+          .filter(Boolean) as AcceptedCase[]
+
+        setAcceptedCases(transformedCases)
+      } catch (err) {
+        console.error("Unexpected error fetching accepted cases:", err)
+        setFetchError("Something went wrong while loading accepted cases.")
+      } finally {
+        setIsLoadingAccepted(false)
+      }
+    }
+
+    loadAcceptedCases()
+  }, [supabase])
+
+  const downloadCaseDocument = async (caseId: string, docMeta: CaseDocument) => {
+    if (!docMeta.path) {
+      setFetchError("Document path is missing for this file.")
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/cases/${caseId}/download?filePath=${encodeURIComponent(docMeta.path)}`,
+      )
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to download document.")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const linkElement = document.createElement("a")
+      linkElement.href = url
+      linkElement.download = docMeta.name
+      document.body.appendChild(linkElement)
+      linkElement.click()
+      linkElement.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Error downloading document:", err)
+      setFetchError(err instanceof Error ? err.message : "Failed to download document.")
+    }
+  }
+
+  const handleDownloadAllDocuments = async (caseItem: AcceptedCase) => {
+    if (caseItem.documents.length === 0) {
+      setFetchError("No documents available for this case.")
+      return
+    }
+
+    for (const docMeta of caseItem.documents) {
+      if (docMeta.path) {
+        await downloadCaseDocument(caseItem.caseId, docMeta)
+      }
+    }
+  }
+
   const handleAcceptRequest = (requestId: string, consultationFee: string) => {
     const request = pendingRequests.find((r) => r.id === requestId)
     if (request) {
+      const today = new Date().toISOString().split("T")[0]
       const newAcceptedCase: AcceptedCase = {
         id: `accepted-${requestId}`,
-        ...request,
+        caseId: request.caseId || request.id,
+        caseNumber: request.caseNumber,
+        caseType: request.caseType,
+        thanaName: request.thanaName,
+        caseName: request.caseName,
+        dharaNumber: request.dharaNumber,
+        caseTitle: request.caseTitle,
+        registerDate: request.registerDate,
+        description: request.description,
+        bpFormNo: request.bpFormNo,
+        casePersons: request.casePersons,
+        documents: request.documents,
         status: "accepted",
-        acceptedDate: new Date().toISOString().split("T")[0],
+        acceptedDate: today,
+        clientName: request.clientName,
+        clientPhone: request.clientPhone,
+        clientEmail: request.clientEmail,
         consultationFee: consultationFee || request.proposedFee || "৳0",
-        lastUpdated: new Date().toISOString().split("T")[0],
+        lastUpdated: today,
       }
       setAcceptedCases([newAcceptedCase, ...acceptedCases])
       setPendingRequests(pendingRequests.filter((r) => r.id !== requestId))
@@ -215,14 +399,33 @@ export default function LawyerMyCasesPage() {
     setPendingRequests(pendingRequests.filter((r) => r.id !== requestId))
   }
 
-  const handleStatusChange = (caseId: string, newStatus: AcceptedCase["status"]) => {
+  const handleStatusChange = async (caseItem: AcceptedCase, newStatus: CaseStatusOption) => {
+    const previousCases = acceptedCases
+    const now = new Date().toISOString()
     setAcceptedCases(
       acceptedCases.map((c) =>
-        c.id === caseId
-          ? { ...c, status: newStatus, lastUpdated: new Date().toISOString().split("T")[0] }
-          : c,
+        c.caseId === caseItem.caseId ? { ...c, status: newStatus, lastUpdated: formatISODate(now) } : c,
       ),
     )
+
+    try {
+      setFetchError(null)
+      const response = await fetch(`/api/lawyer/cases/${caseItem.caseId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update case status.")
+      }
+    } catch (err) {
+      console.error("Failed to update case status:", err)
+      setFetchError(err instanceof Error ? err.message : "Failed to update case status. Please try again.")
+      setAcceptedCases(previousCases)
+    }
   }
 
   const handleViewDetails = (caseItem: PendingCaseRequest | AcceptedCase) => {
@@ -240,7 +443,7 @@ export default function LawyerMyCasesPage() {
     total: acceptedCases.length,
     active: acceptedCases.filter((c) => c.status === "in_progress" || c.status === "accepted").length,
     completed: acceptedCases.filter((c) => c.status === "completed").length,
-    onHold: acceptedCases.filter((c) => c.status === "on_hold").length,
+    onHold: acceptedCases.filter((c) => c.status === "hold").length,
   }
 
   const getStatusBadgeColor = (status: AcceptedCase["status"]) => {
@@ -251,7 +454,7 @@ export default function LawyerMyCasesPage() {
         return "bg-yellow-100 text-yellow-800"
       case "completed":
         return "bg-green-100 text-green-800"
-      case "on_hold":
+      case "hold":
         return "bg-gray-100 text-gray-800"
       default:
         return ""
@@ -266,8 +469,8 @@ export default function LawyerMyCasesPage() {
         return "In Progress"
       case "completed":
         return "Completed"
-      case "on_hold":
-        return "On Hold"
+      case "hold":
+        return "Hold"
       default:
         return status
     }
@@ -298,7 +501,7 @@ export default function LawyerMyCasesPage() {
                   <SelectItem value="accepted">Accepted</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="hold">Hold</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -363,6 +566,12 @@ export default function LawyerMyCasesPage() {
             </CardContent>
           </Card>
         </div>
+
+        {fetchError && (
+          <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            {fetchError}
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -461,7 +670,13 @@ export default function LawyerMyCasesPage() {
                           <span className="hidden sm:inline">View Details</span>
                           <span className="sm:hidden">Details</span>
                         </Button>
-                        <Button size="sm" variant="outline" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 sm:flex-initial text-xs sm:text-sm"
+                          disabled
+                          title="Documents can be downloaded after accepting the case"
+                        >
                           <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
                           <span className="hidden sm:inline">Documents</span>
                           <span className="sm:hidden">Docs</span>
@@ -497,7 +712,14 @@ export default function LawyerMyCasesPage() {
 
           {/* Accepted Cases Tab */}
           <TabsContent value="accepted" className="space-y-4">
-            {filteredAcceptedCases.length === 0 ? (
+            {isLoadingAccepted ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Loading accepted cases...</p>
+                </CardContent>
+              </Card>
+            ) : filteredAcceptedCases.length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -578,7 +800,13 @@ export default function LawyerMyCasesPage() {
                             <span className="hidden sm:inline">View Details</span>
                             <span className="sm:hidden">Details</span>
                           </Button>
-                          <Button size="sm" variant="outline" className="flex-1 sm:flex-initial text-xs sm:text-sm">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 sm:flex-initial text-xs sm:text-sm"
+                            onClick={() => handleDownloadAllDocuments(caseItem)}
+                            disabled={caseItem.documents.length === 0}
+                          >
                             <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
                             <span className="hidden sm:inline">Documents</span>
                             <span className="sm:hidden">Docs</span>
@@ -595,18 +823,17 @@ export default function LawyerMyCasesPage() {
                         </div>
                         <Select
                           value={caseItem.status}
-                          onValueChange={(value: AcceptedCase["status"]) =>
-                            handleStatusChange(caseItem.id, value)
-                          }
+                          onValueChange={(value: CaseStatusOption) => handleStatusChange(caseItem, value)}
                         >
                           <SelectTrigger className="w-full sm:w-32 h-8 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="accepted">Accepted</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="on_hold">On Hold</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
+                            {CASE_STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {getStatusLabel(option)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -683,11 +910,7 @@ export default function LawyerMyCasesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
                     <div>
                       <p className="text-muted-foreground">Client Name</p>
-                      <p className="font-medium">
-                        {"clientName" in selectedCase
-                          ? selectedCase.clientName
-                          : selectedCase.clientName}
-                      </p>
+                      <p className="font-medium">{selectedCase.clientName}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Phone</p>
@@ -729,14 +952,24 @@ export default function LawyerMyCasesPage() {
                   <div className="space-y-2">
                     {selectedCase.documents.map((doc, idx) => (
                       <div
-                        key={idx}
+                        key={doc.id || idx}
                         className="flex items-center justify-between p-2 bg-muted rounded-lg gap-2"
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="text-xs sm:text-sm truncate">{doc}</span>
+                          <span className="text-xs sm:text-sm truncate">{doc.name}</span>
                         </div>
-                        <Button size="sm" variant="ghost" className="shrink-0">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0"
+                          disabled={!("status" in selectedCase) || !doc.path}
+                          onClick={() => {
+                            if ("status" in selectedCase && doc.path) {
+                              downloadCaseDocument(selectedCase.caseId, doc)
+                            }
+                          }}
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
                       </div>
