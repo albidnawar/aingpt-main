@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { LawyerDashboardLayout } from "@/components/lawyer-dashboard-layout"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -55,7 +55,7 @@ interface CaseDocument {
 
 interface PendingCaseRequest {
   id: string
-  caseId?: string
+  caseId: string
   caseNumber: string
   caseType: string
   thanaName: string
@@ -71,7 +71,6 @@ interface PendingCaseRequest {
   clientName: string
   clientPhone: string
   clientEmail: string
-  proposedFee?: string
 }
 
 interface AcceptedCase {
@@ -97,80 +96,14 @@ interface AcceptedCase {
   lastUpdated: string
 }
 
-const createMockDocuments = (caseId: string, files: string[]): CaseDocument[] =>
-  files.map((name, index) => ({
-    id: `${caseId}-doc-${index + 1}`,
-    name,
-  }))
-
-const mockPendingRequests: PendingCaseRequest[] = [
-  {
-    id: "req-1",
-    caseId: "req-1",
-    caseNumber: "2024-050",
-    caseType: "Civil",
-    thanaName: "Banani Thana",
-    caseName: "Contract Dispute",
-    dharaNumber: "10",
-    caseTitle: "Breach of contract - Payment default",
-    registerDate: "2024-02-20",
-    description: "Client failed to make payment as per the contract terms. Seeking legal remedy for breach of contract.",
-    bpFormNo: "BP-2024-050",
-    casePersons: "ABC Company vs XYZ Traders",
-    documents: createMockDocuments("req-1", ["contract.pdf", "payment_evidence.pdf"]),
-    requestedDate: "2024-02-22",
-    clientName: "Karim Uddin",
-    clientPhone: "+880 1987-654321",
-    clientEmail: "karim.uddin@email.com",
-    proposedFee: "৳4,000",
-  },
-  {
-    id: "req-2",
-    caseId: "req-2",
-    caseNumber: "2024-051",
-    caseType: "Criminal",
-    thanaName: "Uttara Thana",
-    caseName: "Theft Case",
-    dharaNumber: "379",
-    caseTitle: "Theft of valuable items",
-    registerDate: "2024-02-18",
-    description: "Theft case involving valuable electronic items from residence. FIR has been filed.",
-    bpFormNo: "BP-2024-051",
-    casePersons: "State vs Unknown",
-    documents: createMockDocuments("req-2", ["fir.pdf", "police_report.pdf", "evidence_photos.pdf"]),
-    requestedDate: "2024-02-21",
-    clientName: "Rashida Khatun",
-    clientPhone: "+880 1876-543210",
-    clientEmail: "rashida.khatun@email.com",
-    proposedFee: "৳5,000",
-  },
-  {
-    id: "req-3",
-    caseId: "req-3",
-    caseNumber: "2024-052",
-    caseType: "Family",
-    thanaName: "Wari Thana",
-    caseName: "Child Custody",
-    dharaNumber: "25",
-    caseTitle: "Child custody dispute",
-    registerDate: "2024-02-19",
-    description: "Seeking custody of minor child. Divorce proceedings completed, now need legal assistance for custody.",
-    bpFormNo: "BP-2024-052",
-    casePersons: "Ayesha Begum vs Hasan Ahmed",
-    documents: createMockDocuments("req-3", ["divorce_decree.pdf", "child_birth_certificate.pdf"]),
-    requestedDate: "2024-02-22",
-    clientName: "Ayesha Begum",
-    clientPhone: "+880 1765-432109",
-    clientEmail: "ayesha.begum@email.com",
-  },
-]
-
 export default function LawyerMyCasesPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
-  const [pendingRequests, setPendingRequests] = useState<PendingCaseRequest[]>(mockPendingRequests)
+  const [pendingRequests, setPendingRequests] = useState<PendingCaseRequest[]>([])
   const [acceptedCases, setAcceptedCases] = useState<AcceptedCase[]>([])
   const [isLoadingAccepted, setIsLoadingAccepted] = useState(true)
+  const [isLoadingPending, setIsLoadingPending] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [selectedCase, setSelectedCase] = useState<PendingCaseRequest | AcceptedCase | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -191,131 +124,158 @@ export default function LawyerMyCasesPage() {
     return parts[parts.length - 1].replace(/^\d+-/, "")
   }
 
-  useEffect(() => {
-    const loadAcceptedCases = async () => {
-      try {
-        setIsLoadingAccepted(true)
-        setFetchError(null)
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession()
+const isPendingRequest = (caseItem: PendingCaseRequest | AcceptedCase): caseItem is PendingCaseRequest => {
+  return !("status" in caseItem)
+}
 
-        if (sessionError || !session?.user) {
-          setFetchError("Please log in to view accepted cases.")
-          setAcceptedCases([])
-          return
-        }
+  const loadAcceptedCases = useCallback(async () => {
+    try {
+      setIsLoadingAccepted(true)
+      setFetchError(null)
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-        const { data: lawyerData, error: lawyerError } = await supabase
-          .from("lawyers")
-          .select("id")
-          .eq("auth_user_id", session.user.id)
-          .maybeSingle()
-
-        if (lawyerError || !lawyerData) {
-          setFetchError("Lawyer profile not found.")
-          setAcceptedCases([])
-          return
-        }
-
-        const { data, error } = await supabase
-          .from("case_acceptances")
-          .select(
-            `
-            id,
-            status,
-            accepted_at,
-            case_id,
-            cases (
-              id,
-              case_number,
-              case_type,
-              thana_name,
-              case_name_dhara,
-              dhara_number,
-              case_title,
-              register_date,
-              bp_form_no,
-              case_persons,
-              relationship,
-              short_description,
-              created_at,
-              users (
-                id,
-                full_name,
-                username,
-                email,
-                phone
-              ),
-              case_documents (
-                id,
-                document_path
-              )
-            )
-          `,
-          )
-          .eq("lawyer_id", lawyerData.id)
-          .order("accepted_at", { ascending: false })
-
-        if (error) {
-          console.error("Error fetching accepted cases:", error)
-          setFetchError("Failed to load accepted cases.")
-          setAcceptedCases([])
-          return
-        }
-
-        const transformedCases: AcceptedCase[] = (data || [])
-          .map((record: any) => {
-            if (!record.cases) {
-              return null
-            }
-            const caseInfo = record.cases
-            const documents: CaseDocument[] = (caseInfo.case_documents || []).map(
-              (doc: any, index: number) => ({
-                id: doc.id ? String(doc.id) : `${caseInfo.id}-doc-${index + 1}`,
-                name: getFileNameFromPath(doc.document_path),
-                path: doc.document_path,
-              }),
-            )
-            const client = caseInfo.users
-            const caseStatus = normalizeCaseStatus(caseInfo.status || record.status)
-            return {
-              id: String(record.id),
-              caseId: String(caseInfo.id),
-              caseNumber: caseInfo.case_number || "",
-              caseType: caseInfo.case_type || "",
-              thanaName: caseInfo.thana_name || "",
-              caseName: caseInfo.case_name_dhara || "",
-              dharaNumber: caseInfo.dhara_number || "",
-              caseTitle: caseInfo.case_title || "",
-              registerDate: caseInfo.register_date ? formatISODate(caseInfo.register_date) : "N/A",
-              description: caseInfo.short_description || "",
-              bpFormNo: caseInfo.bp_form_no || "",
-              casePersons: caseInfo.case_persons || "",
-              documents,
-              status: caseStatus,
-              acceptedDate: record.accepted_at ? formatISODate(record.accepted_at) : "N/A",
-              clientName: client?.full_name || client?.username || "Client",
-              clientPhone: client?.phone || "Not provided",
-              clientEmail: client?.email || "Not provided",
-              consultationFee: "৳0",
-              lastUpdated: formatISODate(caseInfo.created_at || record.accepted_at),
-            }
-          })
-          .filter(Boolean) as AcceptedCase[]
-
-        setAcceptedCases(transformedCases)
-      } catch (err) {
-        console.error("Unexpected error fetching accepted cases:", err)
-        setFetchError("Something went wrong while loading accepted cases.")
-      } finally {
-        setIsLoadingAccepted(false)
+      if (sessionError || !session?.user) {
+        setFetchError("Please log in to view accepted cases.")
+        setAcceptedCases([])
+        return
       }
-    }
 
-    loadAcceptedCases()
+      const { data: lawyerData, error: lawyerError } = await supabase
+        .from("lawyers")
+        .select("id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle()
+
+      if (lawyerError || !lawyerData) {
+        setFetchError("Lawyer profile not found.")
+        setAcceptedCases([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("case_acceptances")
+        .select(
+          `
+          id,
+          status,
+          accepted_at,
+          case_id,
+          cases (
+            id,
+            case_number,
+            case_type,
+            thana_name,
+            case_name_dhara,
+            dhara_number,
+            case_title,
+            register_date,
+            bp_form_no,
+            case_persons,
+            relationship,
+            short_description,
+            created_at,
+            users (
+              id,
+              full_name,
+              username,
+              email,
+              phone
+            ),
+            case_documents (
+              id,
+              document_path
+            )
+          )
+        `,
+        )
+        .eq("lawyer_id", lawyerData.id)
+        .order("accepted_at", { ascending: false })
+
+      if (error) {
+        console.error("Error fetching accepted cases:", error)
+        setFetchError("Failed to load accepted cases.")
+        setAcceptedCases([])
+        return
+      }
+
+      const transformedCases: AcceptedCase[] = (data || [])
+        .map((record: any) => {
+          if (!record.cases) {
+            return null
+          }
+          const caseInfo = record.cases
+          const documents: CaseDocument[] = (caseInfo.case_documents || []).map(
+            (doc: any, index: number) => ({
+              id: doc.id ? String(doc.id) : `${caseInfo.id}-doc-${index + 1}`,
+              name: getFileNameFromPath(doc.document_path),
+              path: doc.document_path,
+            }),
+          )
+          const client = caseInfo.users
+          const caseStatus = normalizeCaseStatus(caseInfo.status || record.status)
+          return {
+            id: String(record.id),
+            caseId: String(caseInfo.id),
+            caseNumber: caseInfo.case_number || "",
+            caseType: caseInfo.case_type || "",
+            thanaName: caseInfo.thana_name || "",
+            caseName: caseInfo.case_name_dhara || "",
+            dharaNumber: caseInfo.dhara_number || "",
+            caseTitle: caseInfo.case_title || "",
+            registerDate: caseInfo.register_date ? formatISODate(caseInfo.register_date) : "N/A",
+            description: caseInfo.short_description || "",
+            bpFormNo: caseInfo.bp_form_no || "",
+            casePersons: caseInfo.case_persons || "",
+            documents,
+            status: caseStatus,
+            acceptedDate: record.accepted_at ? formatISODate(record.accepted_at) : "N/A",
+            clientName: client?.full_name || client?.username || "Client",
+            clientPhone: client?.phone || "Not provided",
+            clientEmail: client?.email || "Not provided",
+            consultationFee: "৳0",
+            lastUpdated: formatISODate(caseInfo.created_at || record.accepted_at),
+          }
+        })
+        .filter(Boolean) as AcceptedCase[]
+
+      setAcceptedCases(transformedCases)
+    } catch (err) {
+      console.error("Unexpected error fetching accepted cases:", err)
+      setFetchError("Something went wrong while loading accepted cases.")
+    } finally {
+      setIsLoadingAccepted(false)
+    }
   }, [supabase])
+
+  useEffect(() => {
+    loadAcceptedCases()
+  }, [loadAcceptedCases])
+
+  const loadPendingRequests = useCallback(async () => {
+    try {
+      setIsLoadingPending(true)
+      const response = await fetch("/api/lawyer/requests")
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Failed to load pending requests.")
+      }
+      const requests: PendingCaseRequest[] = body?.requests ?? []
+      setPendingRequests(requests)
+    } catch (err) {
+      console.error("Unexpected error fetching pending requests:", err)
+      setPendingRequests([])
+      setFetchError(err instanceof Error ? err.message : "Failed to load pending requests.")
+    } finally {
+      setIsLoadingPending(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadPendingRequests()
+  }, [loadPendingRequests])
 
   const downloadCaseDocument = async (caseId: string, docMeta: CaseDocument) => {
     if (!docMeta.path) {
@@ -361,42 +321,57 @@ export default function LawyerMyCasesPage() {
     }
   }
 
-  const handleAcceptRequest = (requestId: string, consultationFee: string) => {
-    const request = pendingRequests.find((r) => r.id === requestId)
-    if (request) {
-      const today = new Date().toISOString().split("T")[0]
-      const newAcceptedCase: AcceptedCase = {
-        id: `accepted-${requestId}`,
-        caseId: request.caseId || request.id,
-        caseNumber: request.caseNumber,
-        caseType: request.caseType,
-        thanaName: request.thanaName,
-        caseName: request.caseName,
-        dharaNumber: request.dharaNumber,
-        caseTitle: request.caseTitle,
-        registerDate: request.registerDate,
-        description: request.description,
-        bpFormNo: request.bpFormNo,
-        casePersons: request.casePersons,
-        documents: request.documents,
-        status: "accepted",
-        acceptedDate: today,
-        clientName: request.clientName,
-        clientPhone: request.clientPhone,
-        clientEmail: request.clientEmail,
-        consultationFee: consultationFee || request.proposedFee || "৳0",
-        lastUpdated: today,
+  const handleAcceptRequest = async (request: PendingCaseRequest) => {
+    setPendingActionId(request.id)
+    setFetchError(null)
+    try {
+      const acceptResponse = await fetch(`/api/lawyer/cases/${request.caseId}/accept`, {
+        method: "POST",
+      })
+      const acceptBody = await acceptResponse.json().catch(() => null)
+      if (!acceptResponse.ok) {
+        throw new Error(acceptBody?.error ?? "Failed to accept case.")
       }
-      setAcceptedCases([newAcceptedCase, ...acceptedCases])
-      setPendingRequests(pendingRequests.filter((r) => r.id !== requestId))
+
+      await fetch("/api/case-requests", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: request.id }),
+      }).catch((err) => console.error("Failed to remove case request:", err))
+
+      await Promise.all([loadPendingRequests(), loadAcceptedCases()])
+
       if (activeTab === "pending") {
         setActiveTab("accepted")
       }
+    } catch (err) {
+      console.error("Error accepting request:", err)
+      setFetchError(err instanceof Error ? err.message : "Failed to accept case. Please try again.")
+    } finally {
+      setPendingActionId(null)
     }
   }
 
-  const handleRejectRequest = (requestId: string) => {
-    setPendingRequests(pendingRequests.filter((r) => r.id !== requestId))
+  const handleRejectRequest = async (request: PendingCaseRequest) => {
+    setPendingActionId(request.id)
+    setFetchError(null)
+    try {
+      const response = await fetch("/api/case-requests", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: request.id }),
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Failed to reject case request.")
+      }
+      await loadPendingRequests()
+    } catch (err) {
+      console.error("Error rejecting request:", err)
+      setFetchError(err instanceof Error ? err.message : "Failed to reject case request.")
+    } finally {
+      setPendingActionId(null)
+    }
   }
 
   const handleStatusChange = async (caseItem: AcceptedCase, newStatus: CaseStatusOption) => {
@@ -593,7 +568,14 @@ export default function LawyerMyCasesPage() {
 
           {/* Pending Requests Tab */}
           <TabsContent value="pending" className="space-y-4">
-            {pendingRequests.length === 0 ? (
+            {isLoadingPending ? (
+              <Card>
+                <CardContent className="p-12 text-center text-muted-foreground text-sm flex flex-col items-center gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  Loading pending requests...
+                </CardContent>
+              </Card>
+            ) : pendingRequests.length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -622,14 +604,6 @@ export default function LawyerMyCasesPage() {
                           <span>Case #: {request.caseNumber}</span>
                           <span className="hidden sm:inline">•</span>
                           <span className="break-words">Client: {request.clientName}</span>
-                          {request.proposedFee && (
-                            <>
-                              <span className="hidden sm:inline">•</span>
-                              <span className="text-accent font-medium">
-                                Proposed: {request.proposedFee}
-                              </span>
-                            </>
-                          )}
                         </div>
                       </div>
                       <div className="text-left sm:text-right shrink-0">
@@ -687,20 +661,30 @@ export default function LawyerMyCasesPage() {
                           size="sm"
                           variant="outline"
                           className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 border-red-200 text-xs sm:text-sm"
-                          onClick={() => handleRejectRequest(request.id)}
+                          onClick={() => handleRejectRequest(request)}
+                          disabled={pendingActionId === request.id}
                         >
                           <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
-                          <span className="hidden sm:inline">Reject</span>
-                          <span className="sm:hidden">Reject</span>
+                          <span className="hidden sm:inline">
+                            {pendingActionId === request.id ? "Processing..." : "Reject"}
+                          </span>
+                          <span className="sm:hidden">
+                            {pendingActionId === request.id ? "..." : "Reject"}
+                          </span>
                         </Button>
                         <Button
                           size="sm"
                           className="flex-1 bg-accent hover:bg-accent/90 text-xs sm:text-sm"
-                          onClick={() => handleAcceptRequest(request.id, request.proposedFee || "৳0")}
+                          onClick={() => handleAcceptRequest(request)}
+                          disabled={pendingActionId === request.id}
                         >
                           <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
-                          <span className="hidden sm:inline">Accept</span>
-                          <span className="sm:hidden">Accept</span>
+                          <span className="hidden sm:inline">
+                            {pendingActionId === request.id ? "Processing..." : "Accept"}
+                          </span>
+                          <span className="sm:hidden">
+                            {pendingActionId === request.id ? "..." : "Accept"}
+                          </span>
                         </Button>
                       </div>
                     </div>
@@ -930,18 +914,11 @@ export default function LawyerMyCasesPage() {
                         </Button>
                       </div>
                     </div>
-                    {"status" in selectedCase ? (
+                    {"status" in selectedCase && (
                       <div>
                         <p className="text-muted-foreground">Consultation Fee</p>
                         <p className="font-medium text-accent">{selectedCase.consultationFee}</p>
                       </div>
-                    ) : (
-                      selectedCase.proposedFee && (
-                        <div>
-                          <p className="text-muted-foreground">Proposed Fee</p>
-                          <p className="font-medium text-accent">{selectedCase.proposedFee}</p>
-                        </div>
-                      )
                     )}
                   </div>
                 </div>
@@ -986,7 +963,33 @@ export default function LawyerMyCasesPage() {
                   >
                     Close
                   </Button>
-                  {"status" in selectedCase ? (
+                  {isPendingRequest(selectedCase) ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                        disabled={pendingActionId === selectedCase.id}
+                        onClick={async () => {
+                          await handleRejectRequest(selectedCase)
+                          setIsDetailsOpen(false)
+                        }}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        {pendingActionId === selectedCase.id ? "Processing..." : "Reject Request"}
+                      </Button>
+                      <Button
+                        className="bg-accent hover:bg-accent/90 w-full sm:w-auto"
+                        disabled={pendingActionId === selectedCase.id}
+                        onClick={async () => {
+                          await handleAcceptRequest(selectedCase)
+                          setIsDetailsOpen(false)
+                        }}
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        {pendingActionId === selectedCase.id ? "Processing..." : "Accept Case"}
+                      </Button>
+                    </>
+                  ) : (
                     <Link
                       href={`/lawyer_dashboard/accepted-cases-chat?case=${selectedCase.id}`}
                       className="w-full sm:w-auto"
@@ -996,30 +999,6 @@ export default function LawyerMyCasesPage() {
                         Chat with Client
                       </Button>
                     </Link>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                        onClick={() => {
-                          handleRejectRequest(selectedCase.id)
-                          setIsDetailsOpen(false)
-                        }}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Reject Request
-                      </Button>
-                      <Button
-                        className="bg-accent hover:bg-accent/90 w-full sm:w-auto"
-                        onClick={() => {
-                          handleAcceptRequest(selectedCase.id, selectedCase.proposedFee || "৳0")
-                          setIsDetailsOpen(false)
-                        }}
-                      >
-                        <Check className="h-4 w-4 mr-2" />
-                        Accept Case
-                      </Button>
-                    </>
                   )}
                 </div>
               </div>

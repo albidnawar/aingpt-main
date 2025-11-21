@@ -5,26 +5,12 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import {
-  Scale,
-  MessageCircle,
-  FileText,
-  Users,
-  User,
-  Menu,
-  X,
-  Settings,
-  Crown,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  Bell,
-  Coins,
-} from "lucide-react"
+import { MessageCircle, FileText, Users, User, Menu, X, Settings, Crown, LogOut, ChevronLeft, ChevronRight, Bell, Coins } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { BrandLogo } from "@/components/brand-logo"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -147,10 +133,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between p-6 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Scale className="h-8 w-8 text-accent flex-shrink-0" />
-              {!collapsed && <span className="text-xl font-bold text-foreground">AinGPT</span>}
-            </div>
+            <BrandLogo size={200} className={collapsed ? "" : "justify-start"} />
             <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
               <X className="h-4 w-4" />
             </Button>

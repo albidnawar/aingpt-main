@@ -4,9 +4,10 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Scale, MessageCircle, FileText, Users, BookOpen, Mic, ArrowRight } from "lucide-react"
+import { MessageCircle, FileText, Users, BookOpen, Mic, ArrowRight } from "lucide-react"
 import { AuthModal } from "@/components/auth-modal"
 import { useRouter } from "next/navigation"
+import { BrandLogo } from "@/components/brand-logo"
 
 export default function HomePage() {
   const [message, setMessage] = useState("")
@@ -37,10 +38,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 animate-fade-in">
-            <Scale className="h-8 w-8 text-accent" />
-            <span className="text-2xl font-bold text-foreground">AinGPT</span>
-          </div>
+          <BrandLogo size={200} className="animate-fade-in" priority />
           <Button
             onClick={() => setShowAuthModal(true)}
             className="bg-primary hover:bg-primary/90 animate-fade-in"

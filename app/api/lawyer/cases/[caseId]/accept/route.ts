@@ -69,7 +69,7 @@ export async function POST(
 
     const { data: caseRecord, error: caseError } = await adminSupabase
       .from("cases")
-      .select("id, case_number, case_title, status")
+      .select("id, case_number, case_title, status, user_id")
       .eq("id", caseIdNum)
       .maybeSingle()
 
@@ -132,6 +132,24 @@ export async function POST(
 
     if (caseStatusError) {
       console.error("Error updating case status:", caseStatusError)
+    }
+
+    if (caseRecord.user_id) {
+      const { error: conversationError } = await adminSupabase
+        .from("chat_conversations")
+        .upsert(
+          {
+            case_acceptance_id: acceptanceData.id,
+            case_id: caseIdNum,
+            user_id: caseRecord.user_id,
+            lawyer_id: lawyerData.id,
+          },
+          { onConflict: "case_acceptance_id" },
+        )
+
+      if (conversationError) {
+        console.error("Error ensuring chat conversation:", conversationError)
+      }
     }
 
     return NextResponse.json({
